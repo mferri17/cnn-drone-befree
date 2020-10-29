@@ -1,0 +1,8 @@
+image
+matplotlib
+numpy
+pandas
+opencv-python
+scikit-learn
+tensorflow==2.1.1 # https://github.com/tensorflow/tensorflow/issues/42052#issuecomment-673628933
+tf-keras-vis
