@@ -12,6 +12,7 @@ import sys
 import gc
 from datetime import datetime
 
+import pickle
 import numpy as np
 import pandas as pd
 import sklearn as sk
@@ -65,7 +66,7 @@ from . import general_utils
 
 ### --------------------- STRUCTURE --------------------- ###
 
-def network_create(original_model_path, input_size, regression, classification, retrain_from_layer = None, view_summary = True, view_plot = False):
+def network_create(input_size, regression, classification, initial_weights = None, retrain_from_layer = None, view_summary = True, view_plot = False):
   
   if not regression and not classification:
     raise ValueError("At least one between parameter `regression` and `classification` must be True.")
@@ -137,20 +138,19 @@ def network_create(original_model_path, input_size, regression, classification, 
   # model
   flat_model = Model(inputs = input_img, outputs = outputs) # MODEL
 
-  # --- Restore weights from Dario's model 
+  # --- Restore weights from initial ones 
 
-  old_model = tf.keras.models.load_model(original_model_path)
-
-  for layer in old_model.layers[2:]: # starts at 2 for skipping inputs and nested model
-    try:
-      flat_model.get_layer(layer.name).set_weights(layer.get_weights())
-    except ValueError: # get_layer raises ValueError is a layer does not exist
-      # for each variable, the respective model only contains the associated variable (so the other outputs will be missing)
-      print(layer.name, 'layer not found, skipping')
-      continue 
-
-  for layer in old_model.get_layer('model_1').layers: # nested model weights
-    flat_model.get_layer(layer.name).set_weights(layer.get_weights())
+  if initial_weights is not None:
+    for layer_name, weights in initial_weights.items(): # starts at 2 for skipping inputs and nested model
+      try:
+        flat_model.get_layer(layer_name).set_weights(weights)
+      except ValueError: # get_layer raises ValueError is a layer does not exist
+        # for each variable, the respective model only contains the associated variable (so the other outputs will be missing)
+        print(layer_name, 'layer not found, skipping')
+        continue
+    print('Restored network initial weights')
+  else:
+    print('Network initialized with random weights')
 
   # --- Set trainable layers
 
@@ -175,8 +175,24 @@ def network_create(original_model_path, input_size, regression, classification, 
   return flat_model
 
 
+def network_export_weights(source_model, dest_folder, dest_name):
+  weights = {}
+
+  for layer in source_model.layers[1:]: # skip input layer
+    if isinstance(layer, tf.keras.Model):
+      for nest_layer in layer.layers:
+        weights[nest_layer.name] = nest_layer.get_weights()
+    else:
+        weights[layer.name] = layer.get_weights()
+
+  print(weights.keys())
+
+  with open(os.path.join(dest_folder, dest_name + '.pickle'), 'wb') as fp:
+    pickle.dump(weights, fp)
+
 
 ### ------------------ SIMPLE TRAINING ------------------ ###
+
 
 def network_train(model, data_x, data_y, regression, classification, 
                   batch_size = 64, epochs = 30, verbose = 2,
@@ -239,7 +255,7 @@ def network_train(model, data_x, data_y, regression, classification,
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
 
-def network_train_generator(model, data_files, regression, classification, augmentation, replace_imgs,
+def network_train_generator(model, data_files, regression, classification, augmentation, bgs_folder,
                             batch_size = 64, epochs = 30, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, time_train = True):
@@ -277,8 +293,8 @@ def network_train_generator(model, data_files, regression, classification, augme
 
   # --- Generator
   
-  generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, replace_imgs)
-  generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, replace_imgs)
+  generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, bgs_folder)
+  generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, bgs_folder)
 
   # data_valid = data_loading(data_files_valid)
   # data_valid_augmented = data_augmentation(data_valid, replace_imgs) if augmentation else data_valid
@@ -327,16 +343,33 @@ def data_loading(filenames):
   return np.array(loaded)
 
 
-def data_augmentation(data, backgrounds):
-  for frame in data:
-    bg = np.random.choice(backgrounds, size=(1)) if isinstance(backgrounds, (list, np.ndarray)) and len(backgrounds) > 0 else None
-    frame['image'] = general_utils.image_background_replace_mask(frame['image'], frame['mask'], transparent=False, replace_bg_images=bg)[0]
+# def data_augmentation(data, backgrounds_paths):
+#   if isinstance(backgrounds_paths, (list, np.ndarray)) and len(backgrounds_paths) > 0:
+#     for frame in data:
+#       random_path = np.random.choice(backgrounds_paths)
+#       bg = np.array([plt.imread(random_path)])
+      
+#       if bg[0] is not None:
+#         frame['image'] = general_utils.image_background_replace_mask(frame['image'], frame['mask'], transparent=False, replace_bg_images=bg)[0]
+#       else:
+#         raise LookupError('File {} is not a valid image.'.format(random_path))
+
+#   return data
+
+def data_augmentation(data, backgrounds_paths):
+  # if isinstance(backgrounds_paths, (list, np.ndarray)) and len(backgrounds_paths) > 0:
+  if backgrounds_paths is not None:
+    for frame in data:
+      with open(np.random.choice(backgrounds_paths), 'rb') as fp:
+        bg = pickle.load(fp)
+        frame['image'] = general_utils.image_augment_background(frame['image'], frame['mask'], background = bg)
+
   return data
 
 
 def data_preprocessing(data, regression, classification):
   if not regression and not classification:
-    raise ValueError("At least one between parameter `regression` and `classification` must be True.")
+    raise ValueError('At least one between parameter `regression` and `classification` must be True.')
   images = np.array([d['image'] for d in data])
   actuals = np.array([d['gt'] for d in data]) # https://stackoverflow.com/a/46317786/10866825
   data_x, data_y = maskrcnn_transform_networkdata(images, actuals)
@@ -346,11 +379,11 @@ def data_preprocessing(data, regression, classification):
 
 class My_Batch_Generator(tf.keras.utils.Sequence):
   
-  def __init__(self, files, batch_size, regression, classification, augmentation, backgrounds):
+  def __init__(self, files, batch_size, regression, classification, augmentation, backgrounds_paths):
     self.files = files
     self.batch_size = batch_size
     self.augmentation = augmentation
-    self.backgrounds = backgrounds
+    self.backgrounds_paths = backgrounds_paths
     self.regression = regression
     self.classification = classification
     
@@ -360,7 +393,7 @@ class My_Batch_Generator(tf.keras.utils.Sequence):
   def __getitem__(self, idx):
     batch_files = self.files[idx * self.batch_size : (idx+1) * self.batch_size]
     batch_data = data_loading(batch_files)
-    batch_augmented = data_augmentation(batch_data, self.backgrounds) if self.augmentation else batch_data
+    batch_augmented = data_augmentation(batch_data, self.backgrounds_paths) if self.augmentation else batch_data
     batch_x, batch_y = data_preprocessing(batch_augmented, self.regression, self.classification)
     return batch_x, batch_y
 
@@ -411,6 +444,9 @@ def network_stats(history, regression, classification, view, save, save_folder =
     plt.show()
   else:
     plt.close()
+
+
+### --------------------- SAVE --------------------- ###
 
 
 def network_save(model, folder, name, save_plot = False):

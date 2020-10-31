@@ -11,6 +11,7 @@ import random
 import sys
 import gc
 from datetime import datetime
+import glob
 
 import numpy as np
 import pandas as pd
@@ -19,7 +20,6 @@ import cv2
 from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-
 
 from matplotlib import cm
 from tensorflow.keras.utils import to_categorical
@@ -81,7 +81,7 @@ def create_datetime_folder(base_folder, notes = ''):
   return path
 
 
-def load_images_from_folder(folder):
+def load_images_from_folder(folder, extension='jpg', recursive = True):
   '''
     Loads images from folder in RGB format.
 
@@ -91,13 +91,35 @@ def load_images_from_folder(folder):
     Returns:
         images (ndarray): List of images found
   '''
+
   images = []
-  for filename in os.listdir(folder):
-      img = plt.imread(os.path.join(folder,filename))
-      if img is not None:
-          images.append(img)
+  for filename in list_files_in_folder(folder, extension, recursive):
+    img = plt.imread(os.path.join(folder,filename))
+    if img is not None:
+      images.append(img)
 
   return np.array(images, dtype='O')
+
+
+def list_files_in_folder(folder, extension, recursive = True):
+  '''
+    Find file list from folder.
+
+    Parameters:
+        folder (str): Path in which to find the files
+        extension (str): Extension of the files to be found
+
+    Returns:
+        imgs_paths (list): List of images file paths
+  '''
+  
+  from pathlib import Path
+
+  # for map info, see https://github.com/DeepRNN/image_captioning/issues/66#issuecomment-687896235
+  if recursive:
+    return list(map(str, Path(folder).rglob('*.{}'.format(extension))))
+  else:
+    return list(map(str, Path(folder).glob('*.{}'.format(extension))))
 
 
 def subplots_get_cell(total, rows, cols, counter, ax):
@@ -527,7 +549,7 @@ def image_background_replace_mask(img, mask, smooth = True,
 
   # --- Choose background between blank and images 
   
-  replacing = (isinstance(replace_bg_images, list) or isinstance(replace_bg_images, np.ndarray)) and len(replace_bg_images) > 0
+  replacing = isinstance(replace_bg_images, (list, np.ndarray)) and len(replace_bg_images) > 0
   if replacing:
     backgrounds = replace_bg_images / 255
   else:
@@ -540,6 +562,9 @@ def image_background_replace_mask(img, mask, smooth = True,
 
   result = []
   for bg in backgrounds:
+    if len(bg.shape) == 2: # in case 2D images are given
+      bg = cv2.cvtColor((bg*255).astype('uint8'), cv2.COLOR_GRAY2BGR) / 255
+
     bg_resized = cv2.resize(bg, (np.shape(img)[1], np.shape(img)[0]))[:,:,:3] # resize and remove alpha channel
     masked = (mask_stack * img) + ((1-mask_stack) * bg_resized)  # Blend
     masked = (masked * 255).astype('uint8')                      # Convert back to 8-bit 
@@ -563,3 +588,46 @@ def image_background_replace_mask(img, mask, smooth = True,
         print('Saved in', imgname)
 
   return np.array(result)
+
+
+
+def image_augment_background(img, mask, background, smooth = True):
+  '''
+    Replaces already preprocessed background from a given image by using the given mask.
+
+    Parameters:
+        img (ndarray): Input image
+        img (ndarray): Input mask for the image
+        smooth (bool): If True, smooth the generated mask by using cv2 dilate-erode-smooth sequence
+        replace_bg_images (ndarray): Array of images to set as background instead of blank/transparent mask. If multiple images are provided, an array is returned.
+
+    Returns:
+        images (ndarray): Resulting image with replaced backgrounds
+  '''
+
+  # --- Binarize and smooth the mask
+
+  mask_smoothed = mask.astype('float32')
+
+  if smooth:
+    mask_smoothed = cv2.dilate(mask_smoothed, None, iterations=5)
+    mask_smoothed = cv2.erode(mask_smoothed, None, iterations=5)
+    mask_smoothed = cv2.GaussianBlur(mask_smoothed, (5, 5), 0)
+
+  # --- Blend masked img into backgrounds
+
+  mask_stack = mask_smoothed[:,:,np.newaxis]    # Create 3-channel alpha mask
+  img        = img.astype('float32') / 255.0    # For easy blending
+
+  try:
+    masked = (mask_stack * img) + ((1-mask_stack) * background)  # Blend
+    masked = (masked * 255).astype('uint8')                      # Convert back to 8-bit 
+  except:
+    print(mask_stack.shape)
+    print(img.shape)
+    print(background.shape)
+    plt.imshow(background)
+    plt.show()
+    exit()
+  
+  return masked
