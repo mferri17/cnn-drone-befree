@@ -8,6 +8,7 @@ scikit-learn
 # for using Tensorflow GPU on Windows 10 you need Python 3.7 and TensorFlow 2.1.1
 # for info see https://github.com/tensorflow/tensorflow/issues/42052#issuecomment-673628933
 # otherwise you get the error https://stackoverflow.com/q/63258022/10866825
+# using Linux, also Python 3.6 and 3.8 are fine
 
 tensorflow==2.1.1
 tf-keras-vis

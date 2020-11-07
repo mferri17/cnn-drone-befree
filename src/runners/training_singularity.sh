@@ -1,6 +1,6 @@
 # singularity exec --nv --bind $HOME/Desktop/hgfs/thesis:/project tethys/test2.sif ./training_singularity.sh 
 
-python3 ./training.py \
+python3 ./../training.py \
 /project/dataset \
 --regression \
 --data_size 1024 \
