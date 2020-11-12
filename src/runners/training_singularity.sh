@@ -1,7 +1,11 @@
-# singularity exec --nv --bind $HOME/Desktop/hgfs/thesis:/project tethys/test2.sif ./training_singularity.sh 
+# cd /home/marcofe/thesis/cnn-drone-befree/src/singularity
+# singularity build --fakeroot test3.sif test3.def
+# cd ..
+# singularity exec --nv --bind /home/marcofe/maia/tmp:/project singularity/test3.sif runners/training_singularity.sh
 
 python3 ./training.py \
 /project/dataset \
+3 \
 --regression \
 --data_size 1024 \
 --batch_size 64 \

@@ -156,6 +156,7 @@ def get_args():
 
   parser = argparse.ArgumentParser(description='Train the network on the given dataset using a generator which performs dynamic loading and data augmentation.')
   parser.add_argument('data_folder', type=dir_path, help='path to the dataset') # required
+  parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
   parser.add_argument('-r', '--regression', action='store_true', help='specify the argument if you want to perform regression')
   parser.add_argument('-c', '--classification', action='store_true', help='specify the argument if you want to perform classification')
   parser.add_argument('--data_size', type=int, default=None, metavar='DS', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_size))
@@ -185,9 +186,21 @@ if __name__ == "__main__":
   args = get_args()
   print('\nGIVEN ARGUMENTS: ', args, '\n\n')
 
-  if args.debug:
-    print("COUNT GPUs AVAILABLE: ", len(tf.config.experimental.list_physical_devices('GPU')), '\n')
+  print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
+  gpus = tf.config.experimental.list_physical_devices('GPU')
 
+  if gpus:
+    # Restrict TensorFlow to only use the selected GPU
+    try:
+      tf.config.experimental.set_visible_devices(gpus[args.gpu_number], 'GPU')
+      print('Selected GPU number', args.gpu_number)
+      logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+      print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs \n')
+    except RuntimeError as e:
+      # Visible devices must be set at program startup
+      print(e)
+  else:
+      print('No available GPUs \n')
 
   train_with_generator(
     args.data_folder, args.weights_path, args.data_size, args.regression, args.classification,
