@@ -1,14 +1,14 @@
-python37 ./trai\ning.py ^
-C:/Users/96mar/Desktop/meeting_dario/orig_train_63720/ ^
+python37 ./../training.py ^
+C:/Users/96mar/Desktop/meeting_dario/data/orig_train_63720/ ^
+0 ^
 --regression ^
 --data_size 1024 ^
 --batch_size 64 ^
 --epochs 5 ^
---weights_path ./../dev-models/_originals/v1_original_weights.pickle ^
+--weights_path ./../../dev-models/_originals/v1_original_weights.pickle ^
 --retrain_from 24 ^
 --augmentation ^
---bgs_folder C:\Users\96mar\Desktop\meeting_dario\indoorCVPR_09_PPDario ^
+--bgs_folder C:/Users/96mar/Desktop/meeting_dario/data/indoorCVPR_09_PPDario ^
 --bgs_name indoorCVPR_PPDario ^
---save ^
---save_folder ./../dev-models/training_generator ^
+--save_folder ./../../dev-models/training_generator ^
 --debug

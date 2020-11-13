@@ -146,7 +146,7 @@ def get_args():
     if os.path.isfile(string):
         return string
     else:
-        raise NotADirectoryError(string)
+        raise FileNotFoundError(string)
 
   default_batch_size = 64
   default_epochs = 30
@@ -186,16 +186,19 @@ if __name__ == "__main__":
   args = get_args()
   print('\nGIVEN ARGUMENTS: ', args, '\n\n')
 
-  print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
+  # print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
   gpus = tf.config.experimental.list_physical_devices('GPU')
 
   if gpus:
-    # Restrict TensorFlow to only use the selected GPU
     try:
-      tf.config.experimental.set_visible_devices(gpus[args.gpu_number], 'GPU')
+      # Restrict TensorFlow to only use the selected GPU
       print('Selected GPU number', args.gpu_number)
-      logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-      print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs \n')
+      if args.gpu_number < 0:
+        tf.config.set_visible_devices([], 'GPU')
+      else:
+        tf.config.experimental.set_visible_devices(gpus[args.gpu_number], 'GPU')
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs \n')
     except RuntimeError as e:
       # Visible devices must be set at program startup
       print(e)
