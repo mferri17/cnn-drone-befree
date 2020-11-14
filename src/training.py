@@ -25,51 +25,28 @@ import cv2
 from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-# %matplotlib inline
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # https://stackoverflow.com/a/64448353/10866825
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # disable Tensorflow warnings https://stackoverflow.com/a/64448353/10866825
 
-# %tensorflow_version 1.x
-import tensorflow as tf
-
-# when importing keras, please notice:
+# When importing Tensorflow and Keras, please notice:
 #   https://stackoverflow.com/a/57298275/10866825
 #   https://www.pyimagesearch.com/2019/10/21/keras-vs-tf-keras-whats-the-difference-in-tensorflow-2-0/
 
+import tensorflow as tf
 from tensorflow.keras.layers import *
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import plot_model, to_categorical
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
-# !pip install resnet
-# import resnet as kr
-
 # # -- for GradCAM
-# # !pip install tf-keras-vis
 # from tf_keras_vis.utils import normalize
 # from tf_keras_vis.gradcam import Gradcam
 # from matplotlib import cm
 
-### PATHS
-
-# this file goes into the 'PROJECT_ROOT/src v2/' folder to work properly with the following paths
-this_folder = os.path.dirname(os.path.realpath(__file__))
-lib_folder = os.path.join(this_folder, './lib/')
-original_models_folder = os.path.join(this_folder, './../dev-models/_originals/') # Dario's original trained models (https://drive.switch.ch/index.php/s/Idsyf8WIwQpvRMF)
-original_datasets_folder = os.path.join(this_folder, './../dev-datasets/_originals/') # Dario's original dataset (https://drive.switch.ch/index.php/s/8clDQNH645ZjWDD)
-backgrounds_folder = os.path.join(this_folder, './../dev-datasets/_backgrounds/')
-new_models_folder = os.path.join(this_folder, './../dev-models/')
-new_datasets_folder = os.path.join(this_folder, './../dev-datasets/')
-visualization_folder = os.path.join(this_folder, './../dev-visualization/')
-
-dario_model_path = original_models_folder + 'v1_model_train_size_50000_rep_1.h5'
-dario_train_path = original_datasets_folder + 'dario/v1_train.pickle'
-dario_test_path = original_datasets_folder + 'dario/v1_test.pickle'
-
 ### CUSTOM IMPORTS
 ## see https://stackoverflow.com/a/59703673/10866825 
-## and https://stackoverflow.com/a/63523670/10866825
+## and https://stackoverflow.com/a/63523670/10866825 (for VS Code)
 
 sys.path.append('.')
 from functions import general_utils
@@ -87,11 +64,13 @@ from functions import network_utils
 ### FUNCTIONS
 ######
 
-def train_with_generator(data_folder, network_weights_path, data_size = None,
-                         regression = True, classification = False, 
-                         retrain_from = None, batch_size = 64, epochs = 20,
-                         augmentation = False, backgrounds_folder = None, backgrounds_name = '',
-                         view_stats = False, save_stats = True, save_model = True, save_folder = ''):
+def train_with_generator(data_folder, network_weights_path, data_size,
+                         regression, classification,
+                         retrain_from, verbose, batch_size, epochs,
+                         use_lr_reducer, use_early_stop, 
+                         use_profiler, profile_dir,
+                         augmentation, backgrounds_folder, backgrounds_name,
+                         view_stats, save_stats, save_model, save_folder):
     
     list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
     list_files = list_files[:data_size]
@@ -121,7 +100,11 @@ def train_with_generator(data_folder, network_weights_path, data_size = None,
     replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle') if augmentation and backgrounds_folder is not None else None
 
     model = network_utils.network_create(input_shape, regression, classification, initial_weights, retrain_from, view_summary=False)
-    model, history = network_utils.network_train_generator(model, list_files, regression, classification, augmentation, replace_imgs_paths, batch_size, epochs)
+    model, history = network_utils.network_train_generator(model, list_files, regression, classification, 
+                                                           augmentation, replace_imgs_paths, batch_size, epochs, 
+                                                           verbose, use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
+                                                           use_profiler=use_profiler, profiler_dir=profile_dir)
+    
     network_utils.network_stats(history, regression, classification, view_stats, save_stats, save_folder, model_name)
 
     if save_model:
@@ -164,12 +147,17 @@ def get_args():
   parser.add_argument('--epochs', type=int, default=default_epochs, metavar='E', help='number of training epochs (default = {}, debug = {})'.format(default_epochs, debug_epochs))
   parser.add_argument('--weights_path', type=file_path, metavar='WP', help='path to the network initial weights dictionary {"layer_name": get_weights}') # required
   parser.add_argument('--retrain_from', type=int, default=None, metavar='RF', help='number of layer to retrain from (default = no training, 0 = complete training)')
-  parser.add_argument('-a', '--augmentation', action='store_true', help='specify the argument if you want to perform data augmentation')
+  parser.add_argument('--verbose', type=int, default=2, metavar='VER', help='keras training verbosity (0: silent, 1: complete, 2: one line per epoch')
+  parser.add_argument('--lr_reducer', action='store_true', help='specify the argument if you want to use learning rate reducer callback')
+  parser.add_argument('--early_stop', action='store_true', help='specify the argument if you want to use early stop callback')
+  parser.add_argument('--profiler', action='store_true', help='specify the argument if you want to use TensorBoard profiler callback')
+  parser.add_argument('--profiler_dir', type=dir_path, metavar='PD', help='path in which to save TensorBoard logs')
+  parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform data augmentation')
   parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder for data augmentation')
   parser.add_argument('--bgs_name', type=str, metavar='BGN', help='name/identifier of the chosen backgrounds set')
-  parser.add_argument('-s', '--save', action='store_true', help='specify the argument if you want to save the model and metrics')
+  parser.add_argument('--save', action='store_true', help='specify the argument if you want to save the model and metrics')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save the model and metrics')
-  parser.add_argument('-d', '--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
+  parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
 
   parsed_args = parser.parse_args()
   if parsed_args.debug:
@@ -182,32 +170,41 @@ def get_args():
 
 
 if __name__ == "__main__":
+
+  ## --- Args
   
   args = get_args()
   print('\nGIVEN ARGUMENTS: ', args, '\n\n')
 
-  # print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
+  ## --- GPU settings
+
+  cuda_visibile_devices = os.environ.get('CUDA_VISIBLE_DEVICES')
+  if cuda_visibile_devices is not None:
+    print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
+  
   gpus = tf.config.experimental.list_physical_devices('GPU')
 
   if gpus:
     try:
-      # Restrict TensorFlow to only use the selected GPU
       print('Selected GPU number', args.gpu_number)
       if args.gpu_number < 0:
         tf.config.set_visible_devices([], 'GPU')
       else:
         tf.config.experimental.set_visible_devices(gpus[args.gpu_number], 'GPU')
+        tf.config.experimental.set_memory_growth(gpus[args.gpu_number], True) # not immediately allocating the full memory
         logical_gpus = tf.config.experimental.list_logical_devices('GPU')
         print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs \n')
     except RuntimeError as e:
-      # Visible devices must be set at program startup
-      print(e)
+      print(e) # visible devices must be set at program startup
   else:
       print('No available GPUs \n')
 
+  ## --- Training
+
   train_with_generator(
     args.data_folder, args.weights_path, args.data_size, args.regression, args.classification,
-    args.retrain_from, args.batch_size, args.epochs,
+    args.retrain_from, args.verbose, args.batch_size, args.epochs,
+    args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
     args.augmentation, args.bgs_folder, args.bgs_name,
     view_stats=False, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )

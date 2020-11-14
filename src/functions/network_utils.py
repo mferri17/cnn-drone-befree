@@ -258,9 +258,10 @@ def network_train(model, data_x, data_y, regression, classification,
 def network_train_generator(model, data_files, regression, classification, augmentation, bgs_folder,
                             batch_size = 64, epochs = 30, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
-                            use_lr_reducer = True, use_early_stop = False, time_train = True):
+                            use_lr_reducer = True, use_early_stop = False, 
+                            use_profiler = False, profiler_dir = '.\\logs', time_train = True):
 
-  # --- Model settings
+  # --- Compilation
 
   loss = []
   metrics = []
@@ -276,6 +277,8 @@ def network_train_generator(model, data_files, regression, classification, augme
                 metrics=metrics,
                 optimizer='adam')
 
+  # --- Callbacks
+
   callbacks = []
 
   if use_lr_reducer:
@@ -285,6 +288,10 @@ def network_train_generator(model, data_files, regression, classification, augme
   if use_early_stop:
     early_stop = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=4, verbose=1)
     callbacks.append(early_stop)
+
+  if use_profiler:
+    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '10,20')
+    callbacks.append(tensorboard)
 
   # --- Train/Validation split
     

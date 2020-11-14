@@ -5,10 +5,14 @@ pandas
 opencv-python
 scikit-learn
 
-# for using Tensorflow GPU on Windows 10 you need Python 3.7 and TensorFlow 2.1.1
-# for info see https://github.com/tensorflow/tensorflow/issues/42052#issuecomment-673628933
-# otherwise you get the error https://stackoverflow.com/q/63258022/10866825
-# using Linux, also Python 3.6 and 3.8 are fine
+# For using Tensorflow GPU on Windows 10 you need Python 3.7 https://github.com/tensorflow/tensorflow/issues/42052#issuecomment-673628933
+# otherwise you get the error https://stackoverflow.com/q/63258022/10866825. Using Linux, also Python 3.6 and 3.8 are fine.
+# Anyway, Tensorboard Profiler requires tf >= 2.2.0 https://github.com/tensorflow/profiler
+# and TensorFlow 2.3.1 gives this error https://github.com/tensorflow/tensorflow/issues/38518#issuecomment-686790002
+# so, TensorFlow 2.2.0 is the right choice for profiling.
+# Please note that launcher MUST HAVE ADMIN privileges https://github.com/tensorflow/tensorflow/issues/39143#issuecomment-624924903
 
-tensorflow==2.1.1
+tensorflow==2.2.0
+tensorboard==2.2.2
+tensorboard_plugin_profile
 tf-keras-vis
