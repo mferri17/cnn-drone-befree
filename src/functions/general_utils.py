@@ -606,6 +606,11 @@ def image_augment_background(img, mask, background, smooth = True):
         images (ndarray): Resulting image with replaced backgrounds (uint8)
   '''
 
+  # --- Check if the mask is valid
+
+  if mask.shape != img.shape[:-1]:
+    return img # some images may not have a mask
+
   # --- Binarize and smooth the mask
 
   mask_smoothed = mask.astype('float32')
@@ -650,7 +655,10 @@ def image_augment_background_minimal(img, mask, background):
         images (ndarray): Resulting image with replaced backgrounds (uint8)
   '''
 
+  if mask.shape != img.shape[:-1]:
+    return img # some images may not have a mask
+
   mask_stack = mask[:,:,np.newaxis]                             # Create 3-channel alpha mask
   masked = (mask_stack * img) + ((1-mask_stack) * background)   # Blend
-  
+    
   return masked

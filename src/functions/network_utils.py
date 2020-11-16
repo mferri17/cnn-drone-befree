@@ -289,9 +289,9 @@ def network_train_generator(model, data_files, regression, classification, augme
     early_stop = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=4, verbose=1)
     callbacks.append(early_stop)
 
-  if use_profiler:
-    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,10')
-    callbacks.append(tensorboard)
+  # if use_profiler:
+  #   tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,10')
+  #   callbacks.append(tensorboard)
 
   # --- Train/Validation split
     
@@ -312,6 +312,11 @@ def network_train_generator(model, data_files, regression, classification, augme
   if time_train:
     start_time = time.monotonic()
 
+  # for profiling non-tf operations, see https://www.tensorflow.org/guide/profiler#events
+  # this only works on tf version >= 2.3, so cannot be tested in windows
+  if use_profiler:
+    tf.profiler.experimental.start(profiler_dir, tf.profiler.ProfilerOptions(host_tracer_level=2, python_tracer_level=1, device_tracer_level=1))
+  
   history = model.fit(
       x = generator_train,
       steps_per_epoch = int(len(data_files_train) // batch_size),
@@ -324,6 +329,9 @@ def network_train_generator(model, data_files, regression, classification, augme
       verbose = verbose
   )
 
+  if use_profiler:
+    tf.profiler.experimental.stop()
+
   if time_train:
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
 
@@ -332,15 +340,16 @@ def network_train_generator(model, data_files, regression, classification, augme
 
 def maskrcnn_transform_networkdata(images, actuals):
   image_size = images[0].shape
-
   x_data = 255 - images
   x_data = np.vstack(x_data[:]).astype(np.float32)
   x_data = np.reshape(x_data, (-1, image_size[0], image_size[1], image_size[2]))
+  # x_data = images
   
   yr = np.transpose(actuals[:,0:4])     # shape (regr_variables, samples) (4, ?)
   cat = to_categorical(actuals[:,4:8])  # shape (samples, class_variables, categorical) (?, 4, 3)
   yc = np.transpose(cat, (1, 0, 2))     # shape (class_variables, samples, categorical) (4, ?, 3)
   y_data = [yr[0], yr[1], yr[2], yr[3], yc[0], yc[1], yc[2], yc[3]]
+  # y_data = [yr[0], yr[1], yr[2], yr[3], 0, 0, 0, 0]
 
   return x_data, y_data
 
@@ -355,8 +364,8 @@ def data_augmentation(data, backgrounds_paths):
     for frame in data:
       with open(np.random.choice(backgrounds_paths), 'rb') as fp:
         bg = pickle.load(fp)
-        frame['image'] = general_utils.image_augment_background_minimal(frame['image'], frame['mask'].astype('uint8'), background = bg)
-
+        frame['image'] = general_utils.image_augment_background(frame['image'], frame['mask'], background = bg)
+        # frame['image'] = general_utils.image_augment_background_minimal(frame['image'], frame['mask'].astype('uint8'), background = bg)
   return data
 
 
