@@ -593,23 +593,24 @@ def image_background_replace_mask(img, mask, smooth = True,
 
 def image_augment_background(img, mask, background, smooth = True):
   '''
-    Replaces already preprocessed background from a given image by using the given mask.
+    Replaces background from a given image by using the given mask and background image, see below for dtypes.
+    Also provides error catching. For productioning, use instead the function `image_augment_background_minimal` with proper dtypes.
 
     Parameters:
-        img (ndarray): Input image
-        img (ndarray): Input mask for the image
+        img (ndarray): Input image (uint8)
+        mask (ndarray): Input mask for the image (boolean or binary int/float)
+        background (ndarray): Image to set as background (float32)
         smooth (bool): If True, smooth the generated mask by using cv2 dilate-erode-smooth sequence
-        replace_bg_images (ndarray): Array of images to set as background instead of blank/transparent mask. If multiple images are provided, an array is returned.
 
     Returns:
-        images (ndarray): Resulting image with replaced backgrounds
+        images (ndarray): Resulting image with replaced backgrounds (uint8)
   '''
 
   # --- Binarize and smooth the mask
 
   mask_smoothed = mask.astype('float32')
 
-  if smooth:
+  if True:
     mask_smoothed = cv2.dilate(mask_smoothed, None, iterations=5)
     mask_smoothed = cv2.erode(mask_smoothed, None, iterations=5)
     mask_smoothed = cv2.GaussianBlur(mask_smoothed, (5, 5), 0)
@@ -621,13 +622,35 @@ def image_augment_background(img, mask, background, smooth = True):
 
   try:
     masked = (mask_stack * img) + ((1-mask_stack) * background)  # Blend
-    masked = (masked * 255).astype('uint8')                      # Convert back to 8-bit 
+    masked = (masked * 255).astype('uint8')
   except:
-    print(mask_stack.shape)
-    print(img.shape)
-    print(background.shape)
+    print('\n\nFATAL ERROR IN BACKGROUND BLENDING! See shapes details below together with imshow result.')
+    print('mask_stack.shape', mask_stack.shape)
+    print('img.shape', img.shape)
+    print('background.shape', background.shape)
+    plt.imshow(img)
+    plt.show()
     plt.imshow(background)
     plt.show()
     exit()
+  
+  return masked
+
+
+def image_augment_background_minimal(img, mask, background):
+  '''
+    Replaces background from a given image by using the given (non-smoothed) mask and background.
+    All the parameters must be dtype 'uint8' for a correct blending (so the mask cannot be smoothed).
+
+    Parameters:
+        img (ndarray): Input image (uint8)
+        mask (ndarray): Input mask for the image (uint8)
+        background (ndarray): Image to set as background (uint8)
+    Returns:
+        images (ndarray): Resulting image with replaced backgrounds (uint8)
+  '''
+
+  mask_stack = mask[:,:,np.newaxis]                             # Create 3-channel alpha mask
+  masked = (mask_stack * img) + ((1-mask_stack) * background)   # Blend
   
   return masked

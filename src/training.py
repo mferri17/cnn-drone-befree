@@ -26,11 +26,11 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # disable Tensorflow warnings https://stackoverflow.com/a/64448353/10866825
-
 # When importing Tensorflow and Keras, please notice:
 #   https://stackoverflow.com/a/57298275/10866825
 #   https://www.pyimagesearch.com/2019/10/21/keras-vs-tf-keras-whats-the-difference-in-tensorflow-2-0/
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # disable Tensorflow warnings https://stackoverflow.com/a/64448353/10866825
 
 import tensorflow as tf
 from tensorflow.keras.layers import *
@@ -43,6 +43,7 @@ from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCh
 # from tf_keras_vis.utils import normalize
 # from tf_keras_vis.gradcam import Gradcam
 # from matplotlib import cm
+
 
 ### CUSTOM IMPORTS
 ## see https://stackoverflow.com/a/59703673/10866825 

@@ -45,7 +45,8 @@ from functions import general_utils
 ### FUNCTIONS
 ######
 
-def img_processing(source_path, source_ext, dest_path, img_height, img_width, grayscale, 
+def img_processing(source_path, source_ext, dest_path, 
+                   img_height, img_width, grayscale, cvt_float = False, 
                    data_size = None, find_recursive = False):
 
   images_paths = general_utils.list_files_in_folder(source_path, source_ext, find_recursive)
@@ -84,14 +85,17 @@ def img_processing(source_path, source_ext, dest_path, img_height, img_width, gr
     inter = cv2.INTER_AREA # best for image decimation, see https://docs.opencv.org/master/da/d54/group__imgproc__transform.html#ga5bb5a1fea74ea38e1a5445ca803ff121
     img = cv2.resize(img, (img_width, img_height), interpolation = inter) 
       
-    # -- Convert grayscale images to shape (height,width,1)
+    # -- Convert grayscale images to shape (height,width,1) or BGR to RGB
 
     if grayscale:
       img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)[:,:,np.newaxis] # (height, width, 1)
+    else:
+      img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     # -- Convert to float32
 
-    img = (img / 255).astype('float32')
+    if cvt_float:
+      img = (img / 255).astype('float32')
 
     # -- Save and log progress
 
@@ -140,6 +144,7 @@ def get_args():
   parser.add_argument('dest_height', type=int, help='height of the resulting images')
   parser.add_argument('dest_width', type=int, help='height of the resulting images')
   parser.add_argument('-g', '--dest_gray', action='store_true', help='if the argument is specified, the result will be grayscale')
+  parser.add_argument('--float32', action='store_true', help='if the argument is specified, the result will be float32 instead of uint8')
   parser.add_argument('--data_size', type=int, default=None, metavar='DS', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_size))
   parser.add_argument('-r', '--recursive', action='store_true', help='if the argument is specified, the `source_path` content is treated recursively in sub-directories')
   parser.add_argument('-d', '--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
@@ -158,7 +163,7 @@ if __name__ == "__main__":
   print('\nGIVEN ARGUMENTS: ', args, '\n\n')
 
   img_processing(
-    args.source_path, args.source_ext, args.dest_path, 
-    args.dest_height, args.dest_width, args.dest_gray,
+    args.source_path, args.source_ext, args.dest_path,
+    args.dest_height, args.dest_width, args.dest_gray, args.float32,
     args.data_size, args.recursive
   )

@@ -255,7 +255,7 @@ def network_train(model, data_x, data_y, regression, classification,
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
 
-def network_train_generator(model, data_files, regression, classification, augmentation, bgs_folder,
+def network_train_generator(model, data_files, regression, classification, augmentation, bgs_paths,
                             batch_size = 64, epochs = 30, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
@@ -290,7 +290,7 @@ def network_train_generator(model, data_files, regression, classification, augme
     callbacks.append(early_stop)
 
   if use_profiler:
-    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '10,20')
+    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,10')
     callbacks.append(tensorboard)
 
   # --- Train/Validation split
@@ -300,8 +300,8 @@ def network_train_generator(model, data_files, regression, classification, augme
 
   # --- Generator
   
-  generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, bgs_folder)
-  generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, bgs_folder)
+  generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, bgs_paths)
+  generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, bgs_paths)
 
   # data_valid = data_loading(data_files_valid)
   # data_valid_augmented = data_augmentation(data_valid, replace_imgs) if augmentation else data_valid
@@ -336,7 +336,7 @@ def maskrcnn_transform_networkdata(images, actuals):
   x_data = 255 - images
   x_data = np.vstack(x_data[:]).astype(np.float32)
   x_data = np.reshape(x_data, (-1, image_size[0], image_size[1], image_size[2]))
-
+  
   yr = np.transpose(actuals[:,0:4])     # shape (regr_variables, samples) (4, ?)
   cat = to_categorical(actuals[:,4:8])  # shape (samples, class_variables, categorical) (?, 4, 3)
   yc = np.transpose(cat, (1, 0, 2))     # shape (class_variables, samples, categorical) (4, ?, 3)
@@ -350,49 +350,35 @@ def data_loading(filenames):
   return np.array(loaded)
 
 
-# def data_augmentation(data, backgrounds_paths):
-#   if isinstance(backgrounds_paths, (list, np.ndarray)) and len(backgrounds_paths) > 0:
-#     for frame in data:
-#       random_path = np.random.choice(backgrounds_paths)
-#       bg = np.array([plt.imread(random_path)])
-      
-#       if bg[0] is not None:
-#         frame['image'] = general_utils.image_background_replace_mask(frame['image'], frame['mask'], transparent=False, replace_bg_images=bg)[0]
-#       else:
-#         raise LookupError('File {} is not a valid image.'.format(random_path))
-
-#   return data
-
 def data_augmentation(data, backgrounds_paths):
-  # if isinstance(backgrounds_paths, (list, np.ndarray)) and len(backgrounds_paths) > 0:
   if backgrounds_paths is not None:
     for frame in data:
       with open(np.random.choice(backgrounds_paths), 'rb') as fp:
         bg = pickle.load(fp)
-        frame['image'] = general_utils.image_augment_background(frame['image'], frame['mask'], background = bg)
+        frame['image'] = general_utils.image_augment_background_minimal(frame['image'], frame['mask'].astype('uint8'), background = bg)
 
   return data
 
 
-def data_preprocessing(data, regression, classification):
-  if not regression and not classification:
-    raise ValueError('At least one between parameter `regression` and `classification` must be True.')
+def data_preprocessing(data, target_slicing):
   images = np.array([d['image'] for d in data])
   actuals = np.array([d['gt'] for d in data]) # https://stackoverflow.com/a/46317786/10866825
   data_x, data_y = maskrcnn_transform_networkdata(images, actuals)
-  vars = slice(0,8) if regression and classification else (slice(0,4) if regression else slice(4,8))
-  return data_x, data_y[vars]
+  return data_x, data_y[target_slicing]
 
 
 class My_Batch_Generator(tf.keras.utils.Sequence):
   
   def __init__(self, files, batch_size, regression, classification, augmentation, backgrounds_paths):
+    if not regression and not classification:
+      raise ValueError('At least one between parameter `regression` and `classification` must be True.')
     self.files = files
     self.batch_size = batch_size
     self.augmentation = augmentation
     self.backgrounds_paths = backgrounds_paths
     self.regression = regression
     self.classification = classification
+    self.target_slicing = slice(0,8) if regression and classification else (slice(0,4) if regression else slice(4,8))
     
   def __len__(self):
     return (np.ceil(len(self.files) / float(self.batch_size))).astype(np.int)
@@ -401,7 +387,7 @@ class My_Batch_Generator(tf.keras.utils.Sequence):
     batch_files = self.files[idx * self.batch_size : (idx+1) * self.batch_size]
     batch_data = data_loading(batch_files)
     batch_augmented = data_augmentation(batch_data, self.backgrounds_paths) if self.augmentation else batch_data
-    batch_x, batch_y = data_preprocessing(batch_augmented, self.regression, self.classification)
+    batch_x, batch_y = data_preprocessing(batch_augmented, self.target_slicing)
     return batch_x, batch_y
 
 
