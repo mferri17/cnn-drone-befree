@@ -68,9 +68,8 @@ def test2(data_folder, data_size, augmentation, bgs_folder, input_size):
   list_backgrounds = general_utils.list_files_in_folder(bgs_folder, 'pickle')
 
   tf_data = tf.data.Dataset.from_tensor_slices(list_data)
-  tf_data = tf_data.map(lambda fn : tf.py_function(parse_input, [fn], [tf.float32, tf.float32, tf.float32], 'parse_input'))
-  # tf_data = tf_data.map(lambda img, mask, gt : tf.py_function(get_shapes, [img, mask, gt], [tf.float32, tf.float32, tf.float32], 'shapes'))
-  tf_data = tf_data.map(lambda img, mask, gt : tf.py_function(preprocessing, [img, mask, gt, list_backgrounds], [tf.float32, tf.float32], 'preprocessing'))
+  tf_data = tf_data.map(tf_parse_input)
+  tf_data = tf_data.map(lambda i, m, g : tf_preprocessing(i, m, g, list_backgrounds))
   for xs, ys in tf_data.take(2):
     plt.imshow(xs.numpy().astype('uint8'))
     plt.title(ys.numpy())
@@ -87,18 +86,24 @@ def test2(data_folder, data_size, augmentation, bgs_folder, input_size):
 def tf_read_file(file_path):
   return tf.io.read_file(file_path)
 
+def tf_parse_input(filename):
+  return tf.py_function(parse_input, [filename], [tf.float32, tf.float32, tf.float32], 'parse_input')
+
 def parse_input(filename):
   with open(filename.numpy(), 'rb') as fp:
     sample = pickle.load(fp)
   return sample['image'], sample['mask'], sample['gt']
 
-def get_shapes(img, mask, gt):
-  return img.numpy().shape, mask.numpy().shape, gt.numpy().shape
-
+def tf_preprocessing(img, mask, gt, backgrounds_paths):
+  return tf.py_function(preprocessing, [img, mask, gt, backgrounds_paths], [tf.float32, tf.float32], 'preprocessing')
+  
 def preprocessing(img, mask, gt, backgrounds_paths):
   sample_img = sample_augmentation({'image': img.numpy(), 'mask': mask.numpy()}, backgrounds_paths)
   sample_x, sample_y = sample_preprocessing(sample_img, gt.numpy())
   return sample_x, sample_y
+
+def get_shapes(img, mask, gt):
+  return img.numpy().shape, mask.numpy().shape, gt.numpy().shape
   
 def parse_input_and_preprocess(filename, backgrounds_paths):
   with open(filename.numpy(), 'rb') as fp:
