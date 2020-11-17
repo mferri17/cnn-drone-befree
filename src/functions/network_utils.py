@@ -24,13 +24,11 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 
-# %tensorflow_version 1.x
-import tensorflow as tf
-
-# when importing keras, please notice:
+# When importing Tensorflow and Keras, please notice:
 #   https://stackoverflow.com/a/57298275/10866825
 #   https://www.pyimagesearch.com/2019/10/21/keras-vs-tf-keras-whats-the-difference-in-tensorflow-2-0/
 
+import tensorflow as tf
 from tensorflow.keras.layers import *
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import plot_model, to_categorical
@@ -255,7 +253,33 @@ def network_train(model, data_x, data_y, regression, classification,
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
 
-def network_train_generator(model, data_files, regression, classification, augmentation, bgs_paths,
+def data_generator(files_path, augmentation, backgrounds_paths):
+  for fn in files_path:
+    with open(fn, 'rb') as fp:
+      sample = pickle.load(fp)
+    # sample_img = sample_augmentation(sample, backgrounds_paths) if augmentation and backgrounds_paths is not None else sample['image']
+    # sample_x, sample_y = sample_preprocessing(sample_img, sample['gt'])
+
+    sample_x = np.random.random((60, 108, 3))
+    sample_y = list(np.random.random((4)))
+
+    yield sample_x, sample_y
+
+
+def sample_augmentation(data, backgrounds_paths):
+  with open(np.random.choice(backgrounds_paths), 'rb') as fp:
+    bg = pickle.load(fp)
+  return general_utils.image_augment_background(data['image'], data['mask'], background = bg)
+
+
+def sample_preprocessing(img, gt):
+  x_data = (255 - img).astype(np.float32)
+  y_data = gt[0:4]
+  return x_data, y_data
+
+
+def network_train_generator(model, input_size, data_files, 
+                            regression, classification, augmentation, bgs_paths,
                             batch_size = 64, epochs = 30, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
@@ -289,48 +313,59 @@ def network_train_generator(model, data_files, regression, classification, augme
     early_stop = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=4, verbose=1)
     callbacks.append(early_stop)
 
-  # if use_profiler:
-  #   tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,10')
-  #   callbacks.append(tensorboard)
+  if use_profiler:
+    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '2,20')
+    callbacks.append(tensorboard)
 
   # --- Train/Validation split
     
   from sklearn.model_selection import train_test_split
-  data_files_train, data_files_valid = train_test_split(data_files, test_size=validation_split, shuffle=validation_shuffle, random_state=1)
+  data_files_train, data_files_valid = train_test_split(data_files, test_size=validation_split, 
+                                                        shuffle=validation_shuffle, random_state=1)
 
   # --- Generator
   
-  generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, bgs_paths)
-  generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, bgs_paths)
+  # generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, bgs_paths)
+  # generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, bgs_paths)
 
-  # data_valid = data_loading(data_files_valid)
-  # data_valid_augmented = data_augmentation(data_valid, replace_imgs) if augmentation else data_valid
-  # data_valid_x, data_valid_y = data_preprocessing(data_valid_augmented, regression, classification)
+  generator_train = tf.data.Dataset.from_generator(
+    lambda: data_generator(data_files_train, augmentation, bgs_paths), 
+    output_types=(tf.float32, tf.float32), output_shapes=(input_size, (8 if regression and classification else 4))
+  )
+  generator_train = generator_train.batch(batch_size, drop_remainder=True)
+  generator_train = generator_train.prefetch(10)
+  # generator_train = generator_train.cache()
+
+  generator_valid = tf.data.Dataset.from_generator(
+    lambda: data_generator(data_files_valid, augmentation, bgs_paths), 
+    output_types=(tf.float32, tf.float32), output_shapes=(input_size, (8 if regression and classification else 4))
+  )
+  generator_valid = generator_valid.batch(batch_size, drop_remainder=True)
+  generator_valid = generator_valid.prefetch(10)
+  # generator_valid = generator_valid.cache()
 
   # --- Training
 
   if time_train:
     start_time = time.monotonic()
 
-  # for profiling non-tf operations, see https://www.tensorflow.org/guide/profiler#events
-  # this only works on tf version >= 2.3, so cannot be tested in windows
-  if use_profiler:
-    tf.profiler.experimental.start(profiler_dir, tf.profiler.ProfilerOptions(host_tracer_level=2, python_tracer_level=1, device_tracer_level=1))
+  # # for profiling non-tf operations, see https://www.tensorflow.org/guide/profiler#events and disable tensorboard callback
+  # # this only works on tf version >= 2.3, so cannot be tested in windows (https://github.com/tensorflow/tensorflow/issues/38518#issuecomment-686790002)
+  # if use_profiler:
+  #   tf.profiler.experimental.start(profiler_dir, tf.profiler.experimental.ProfilerOptions(host_tracer_level=2, python_tracer_level=1, device_tracer_level=1))
   
   history = model.fit(
       x = generator_train,
-      steps_per_epoch = int(len(data_files_train) // batch_size),
-      # validation_data = (data_valid_x, data_valid_y),
+      # steps_per_epoch = int(len(data_files_train) // batch_size),
       validation_data = generator_valid,
-      validation_steps = int(len(data_files_valid) // batch_size),
-      # validation_freq = 2,
+      # validation_steps = int(len(data_files_valid) // batch_size),
       epochs = epochs,
       callbacks = callbacks,
       verbose = verbose
   )
 
-  if use_profiler:
-    tf.profiler.experimental.stop()
+  # if use_profiler:
+  #   tf.profiler.experimental.stop()
 
   if time_train:
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
@@ -397,6 +432,9 @@ class My_Batch_Generator(tf.keras.utils.Sequence):
     batch_data = data_loading(batch_files)
     batch_augmented = data_augmentation(batch_data, self.backgrounds_paths) if self.augmentation else batch_data
     batch_x, batch_y = data_preprocessing(batch_augmented, self.target_slicing)
+    # # synthetic data
+    # batch_x = np.random.random((self.batch_size, 60, 108, 3))
+    # batch_y = list(np.random.random((4, self.batch_size)))
     return batch_x, batch_y
 
 

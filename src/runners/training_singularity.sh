@@ -1,7 +1,7 @@
 # cd /home/marcofe/thesis/cnn-drone-befree/src/singularity
 # singularity build --fakeroot test3.sif test3.def
 # cd ..
-# singularity exec --nv --bind /home/marcofe/maia/data:/project singularity/test3.sif runners/training_singularity.sh
+# singularity exec --nv --bind /home/marcofe/maia/data:/project singularity/tf-latest.sif runners/training_singularity.sh
 
 CUDA_VISIBLE_DEVICES=0 python3 ./training.py \
 /project/datasets/orig_train_63720 \

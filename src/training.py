@@ -100,13 +100,24 @@ def train_with_generator(data_folder, network_weights_path, data_size,
     # replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'jpg') if augmentation and backgrounds_folder is not None else None
     replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle') if augmentation and backgrounds_folder is not None else None
 
-    model = network_utils.network_create(input_shape, regression, classification, initial_weights, retrain_from, view_summary=False)
-    model, history = network_utils.network_train_generator(model, list_files, regression, classification, 
-                                                           augmentation, replace_imgs_paths, batch_size, epochs, 
-                                                           verbose, use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
-                                                           use_profiler=use_profiler, profiler_dir=profile_dir)
-    
-    network_utils.network_stats(history, regression, classification, view_stats, save_stats, save_folder, model_name)
+    model = network_utils.network_create(
+      input_shape, regression, classification, 
+      initial_weights, retrain_from, view_summary=False
+    )
+
+    model, history = network_utils.network_train_generator(
+      model, input_shape, list_files, 
+      regression, classification, 
+      augmentation, replace_imgs_paths, 
+      batch_size, epochs, verbose, 
+      use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
+      use_profiler=use_profiler, profiler_dir=profile_dir
+    )
+
+    network_utils.network_stats(
+      history, regression, classification, 
+      view_stats, save_stats, save_folder, model_name
+    )
 
     if save_model:
         network_utils.network_save(model, save_folder, model_name)
