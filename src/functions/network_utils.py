@@ -274,7 +274,7 @@ def sample_preprocessing(img, gt):
   y_data = gt[0:4]
   return x_data, y_data
 
-# ---- TF Data with map
+# ---- TF Data with proper mapping
 
 def tf_parse_input(filename):
   return tf.numpy_function(
@@ -286,22 +286,22 @@ def tf_parse_input(filename):
 def map_parse_input(filename):
   with open(filename, 'rb') as fp:
     sample = pickle.load(fp)
-  # return np.random.random((60,108,3)), np.random.random((60,108)), np.random.random((4))
   return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float32')
 
-def tf_augmentation(img, mask, gt, augmentation, backgrounds_paths):
+def tf_augmentation(img, mask, gt, augmentation, backgrounds):
+  if backgrounds is None:
+    backgrounds = [] # None is not convertible to Tensor
   return tf.numpy_function(
     map_augmentation, 
-    [img, mask, gt, augmentation, backgrounds_paths or []], 
+    [img, mask, gt, augmentation, backgrounds], 
     [tf.uint8, tf.float32], 
     'map_augmentation')
 
-def map_augmentation(img, mask, gt, augmentation, backgrounds_paths):
+def map_augmentation(img, mask, gt, augmentation, backgrounds):
   if augmentation:
-    if len(backgrounds_paths) > 0:
-      with open(np.random.choice(backgrounds_paths), 'rb') as fp:
-        bg = pickle.load(fp)
-        img = general_utils.image_augment_background_minimal(img, mask, bg.astype('uint8'))
+    if len(backgrounds) > 0:
+      bg = backgrounds[np.random.randint(0, len(backgrounds))]
+      img = general_utils.image_augment_background_minimal(img, mask, bg)
   return img, gt
 
 def tf_preprocessing(img, gt):
@@ -324,6 +324,14 @@ def network_train_generator(model, input_size, data_files,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
                             use_profiler = False, profiler_dir = '.\\logs', time_train = True):
+
+  backgrounds = np.array([])
+  if augmentation and bgs_paths is not None:
+    print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
+    backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
+    if backgrounds.dtype != np.uint8:
+      backgrounds = (backgrounds * 255).astype('uint8')
+    print('Loaded {} backgrounds of shape {}.\n'.format(len(backgrounds), backgrounds.shape[1:]))
 
   # --- Compilation
 
@@ -391,24 +399,24 @@ def network_train_generator(model, input_size, data_files,
 
   generator_train = tf.data.Dataset.from_tensor_slices(data_files_train)
   generator_train = generator_train.map(tf_parse_input, map_parallel, map_deter)
-  generator_train = generator_train.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, bgs_paths), map_parallel, map_deter)
+  generator_train = generator_train.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, backgrounds), map_parallel, map_deter)
   generator_train = generator_train.map(lambda img, gt : tf_preprocessing(img, gt), map_parallel, map_deter)
   generator_train = generator_train.batch(batch_size, drop_remainder=True)
 
   generator_valid = tf.data.Dataset.from_tensor_slices(data_files_valid)
   generator_valid = generator_valid.map(tf_parse_input, map_parallel, map_deter)
-  generator_valid = generator_valid.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, bgs_paths), map_parallel, map_deter)
+  generator_valid = generator_valid.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, backgrounds), map_parallel, map_deter)
   generator_valid = generator_valid.map(lambda img, gt : tf_preprocessing(img, gt), map_parallel, map_deter)
   generator_valid = generator_valid.batch(batch_size, drop_remainder=True)
   
   if prefetch:
     generator_train = generator_train.prefetch(prefetch_buffer)
     generator_valid = generator_valid.prefetch(prefetch_buffer)
-    # generator_train = generator_train.apply(tf.data.experimental.prefetch_to_device(device='/gpu:0', buffer_size=2))
-    # generator_valid = generator_valid.apply(tf.data.experimental.prefetch_to_device(device='/gpu:0', buffer_size=2))
 
   # --- Training
 
+  print('Training started...')
+  
   if time_train:
     start_time = time.monotonic()
 
@@ -546,6 +554,8 @@ def network_stats(history, regression, classification, view, save, save_folder =
     plt.show()
   else:
     plt.close()
+
+  print('Model stats computed')
 
 
 ### --------------------- SAVE --------------------- ###

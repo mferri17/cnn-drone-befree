@@ -112,12 +112,48 @@ def parse_input_and_preprocess(filename, backgrounds_paths):
   sample_x, sample_y = sample_preprocessing(sample_img, sample['gt'])
   return sample_x, sample_y
 
+######### TEST 3
+
+def test3():
+
+  ### 1
+
+  # def double(num):
+  #   return tf.data.Dataset.from_tensors(num*2)
+
+  # dataset = tf.data.Dataset.range(5).interleave(double)
+  # print(list(dataset.as_numpy_iterator()))
+  
+  ### 2
+  
+  # dataset = tf.data.Dataset.range(1, 6)  # ==> [ 1, 2, 3, 4, 5 ]
+  # dataset = dataset.interleave(
+  #   lambda x: tf.data.Dataset.from_tensors(x).repeat(6),
+  #   cycle_length=2, block_length=4)
+
+  # print(list(dataset.as_numpy_iterator()))
+
+  ### 3
+
+  # import string
+
+  # samples = list(range(10))
+  # augmenters = list(string.ascii_lowercase)
+
+  # ds_sam = tf.data.Dataset.from_tensor_slices(samples)
+
+  # ds_aug = tf.data.Dataset.from_tensor_slices(augmenters)
+  # ds_aug = ds_aug.shuffle(len(augmenters)).take(len(samples)).repeat(2)
+  
+  # dataset = tf.data.Dataset.range(2).interleave(lambda x: tf.data.Dataset.from_tensors(ds_sam))
+  # # dataset = ds_sam.interleave(ds_aug)
+
+  # for i in dataset.as_numpy_iterator():
+  #   print(i)
+
 ################################
 ### MAIN
 ######
-
-
-
 
 if __name__ == "__main__":
 
@@ -130,7 +166,8 @@ if __name__ == "__main__":
   print('\nPROGRAM STARTED\n')
 
   # test1(data_folder, data_size, augmentation, bgs_folder, input_size)
-  test2(data_folder, data_size, augmentation, bgs_folder, input_size)
+  # test2(data_folder, data_size, augmentation, bgs_folder, input_size)
+  # test3()
 
   print('\nPROGRAM FINISHED')
 

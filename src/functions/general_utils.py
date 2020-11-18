@@ -10,11 +10,12 @@ import errno
 import random
 import sys
 import gc
-from datetime import datetime
+import socket
 import glob
+from datetime import datetime
 
+import pickle
 import numpy as np
-import pandas as pd
 
 import cv2
 from PIL import Image
@@ -115,11 +116,18 @@ def list_files_in_folder(folder, extension, recursive = True):
   
   from pathlib import Path
 
-  # for map info, see https://github.com/DeepRNN/image_captioning/issues/66#issuecomment-687896235
   if recursive:
-    return list(map(str, Path(folder).rglob('*.{}'.format(extension))))
+    glob = Path(folder).rglob('*.{}'.format(extension))
   else:
-    return list(map(str, Path(folder).glob('*.{}'.format(extension))))
+    glob = Path(folder).glob('*.{}'.format(extension))
+
+  # for map info, see https://github.com/DeepRNN/image_captioning/issues/66#issuecomment-687896235
+  return list(map(str, glob))
+
+
+def load_pickle(filepath):
+  with open(filepath, 'rb') as fp:
+    return pickle.load(fp)
 
 
 def subplots_get_cell(total, rows, cols, counter, ax):
