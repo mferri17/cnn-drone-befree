@@ -256,14 +256,12 @@ def network_train(model, data_x, data_y, regression, classification,
 
 def data_generator(files_path, augmentation, backgrounds_paths):
   for fn in files_path:
-    # with open(fn, 'rb') as fp:
-    #   sample = pickle.load(fp)
-    # sample_img = sample_augmentation(sample, backgrounds_paths) if augmentation and backgrounds_paths is not None else sample['image']
-    # sample_x, sample_y = sample_preprocessing(sample_img, sample['gt'])
-
-    sample_x = np.random.random((60, 108, 3))
-    sample_y = list(np.random.random((4)))
-
+    with open(fn, 'rb') as fp:
+      sample = pickle.load(fp)
+    sample_img = sample_augmentation(sample, backgrounds_paths) if augmentation and backgrounds_paths is not None else sample['image']
+    sample_x, sample_y = sample_preprocessing(sample_img, sample['gt'])
+    # sample_x = np.random.random((60, 108, 3))
+    # sample_y = list(np.random.random((4)))
     yield sample_x, sample_y
 
 def sample_augmentation(data, backgrounds_paths):
@@ -279,35 +277,44 @@ def sample_preprocessing(img, gt):
 # ---- TF Data with map
 
 def tf_parse_input(filename):
-  return tf.numpy_function(map_parse_input, [filename], [tf.uint8, tf.int64, tf.float64], 'map_parse_input')
+  return tf.numpy_function(
+    map_parse_input, 
+    [filename], 
+    [tf.uint8, tf.uint8, tf.float32], 
+    'map_parse_input')
 
 def map_parse_input(filename):
   with open(filename, 'rb') as fp:
     sample = pickle.load(fp)
-  return sample['image'], sample['mask'], sample['gt']
   # return np.random.random((60,108,3)), np.random.random((60,108)), np.random.random((4))
+  return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float32')
 
-def tf_preprocessing(img, mask, gt, augmentation, backgrounds_paths):
+def tf_augmentation(img, mask, gt, augmentation, backgrounds_paths):
+  return tf.numpy_function(
+    map_augmentation, 
+    [img, mask, gt, augmentation, backgrounds_paths or []], 
+    [tf.uint8, tf.float32], 
+    'map_augmentation')
+
+def map_augmentation(img, mask, gt, augmentation, backgrounds_paths):
+  if augmentation:
+    if len(backgrounds_paths) > 0:
+      with open(np.random.choice(backgrounds_paths), 'rb') as fp:
+        bg = pickle.load(fp)
+        img = general_utils.image_augment_background_minimal(img, mask, bg.astype('uint8'))
+  return img, gt
+
+def tf_preprocessing(img, gt):
   return tf.numpy_function(
     map_preprocessing, 
-    [img, mask, gt, augmentation, backgrounds_paths or []], 
+    [img, gt], 
     [tf.float32, tf.float32], 
     'map_preprocessing')
-    
-def map_preprocessing(img, mask, gt, augmentation, backgrounds_paths):
-  if augmentation and len(backgrounds_paths) > 0:
-    img = map_augmentation(img, mask, backgrounds_paths)
-
-  x_data = (255 - img).astype(np.float32)
+  
+def map_preprocessing(img, gt):
+  x_data = (255 - img).astype(np.float32) # TODO this is not the same as Dario's one (?)
   y_data = gt[0:4].astype(np.float32)
-  # x_data = np.random.random((60, 108, 3))
-  # y_data = list(np.random.random((4)))
   return x_data, y_data
-
-def map_augmentation(img, mask, backgrounds_paths):
-  with open(np.random.choice(backgrounds_paths), 'rb') as fp:
-    bg = pickle.load(fp)
-  return general_utils.image_augment_background_minimal(img, mask, bg.astype('uint8'))
 
 # ---- end
 
@@ -347,7 +354,7 @@ def network_train_generator(model, input_size, data_files,
     callbacks.append(early_stop)
 
   if use_profiler:
-    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '2, 80')
+    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,20')
     callbacks.append(tensorboard)
 
   # --- Train/Validation split
@@ -377,19 +384,21 @@ def network_train_generator(model, input_size, data_files,
   # generator_valid = generator_valid.prefetch(5)
   # # generator_valid = generator_valid.cache()
 
-  map_parallel = tf.data.experimental.AUTOTUNE
-  map_deter = False
   prefetch = True
   prefetch_buffer = tf.data.experimental.AUTOTUNE
+  map_parallel = tf.data.experimental.AUTOTUNE
+  map_deter = False
 
   generator_train = tf.data.Dataset.from_tensor_slices(data_files_train)
   generator_train = generator_train.map(tf_parse_input, map_parallel, map_deter)
-  generator_train = generator_train.map(lambda img, mask, gt : tf_preprocessing(img, mask, gt, augmentation, bgs_paths), map_parallel, map_deter)
+  generator_train = generator_train.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, bgs_paths), map_parallel, map_deter)
+  generator_train = generator_train.map(lambda img, gt : tf_preprocessing(img, gt), map_parallel, map_deter)
   generator_train = generator_train.batch(batch_size, drop_remainder=True)
 
   generator_valid = tf.data.Dataset.from_tensor_slices(data_files_valid)
   generator_valid = generator_valid.map(tf_parse_input, map_parallel, map_deter)
-  generator_valid = generator_valid.map(lambda img, mask, gt : tf_preprocessing(img, mask, gt, augmentation, bgs_paths), map_parallel, map_deter)
+  generator_valid = generator_valid.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, bgs_paths), map_parallel, map_deter)
+  generator_valid = generator_valid.map(lambda img, gt : tf_preprocessing(img, gt), map_parallel, map_deter)
   generator_valid = generator_valid.batch(batch_size, drop_remainder=True)
   
   if prefetch:
