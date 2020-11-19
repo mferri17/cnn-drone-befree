@@ -280,13 +280,13 @@ def tf_parse_input(filename):
   return tf.numpy_function(
     map_parse_input, 
     [filename], 
-    [tf.uint8, tf.uint8, tf.float32], 
+    [tf.uint8, tf.uint8, tf.float64], 
     'map_parse_input')
 
 def map_parse_input(filename):
   with open(filename, 'rb') as fp:
     sample = pickle.load(fp)
-  return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float32')
+  return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float64')
 
 def tf_augmentation(img, mask, gt, augmentation, backgrounds):
   if backgrounds is None:
@@ -294,7 +294,7 @@ def tf_augmentation(img, mask, gt, augmentation, backgrounds):
   return tf.numpy_function(
     map_augmentation, 
     [img, mask, gt, augmentation, backgrounds], 
-    [tf.uint8, tf.float32], 
+    [tf.uint8, tf.float64], 
     'map_augmentation')
 
 def map_augmentation(img, mask, gt, augmentation, backgrounds):
@@ -305,15 +305,18 @@ def map_augmentation(img, mask, gt, augmentation, backgrounds):
   return img, gt
 
 def tf_preprocessing(img, gt):
-  return tf.numpy_function(
+  x, y = tf.numpy_function(
     map_preprocessing, 
     [img, gt], 
-    [tf.float32, tf.float32], 
+    [tf.float32, tf.float64], 
     'map_preprocessing')
+  # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
+  y = {'x_pred': y[0], 'y_pred': y[1], 'z_pred': y[2], 'yaw_pred': y[3]}
+  return x, y
   
 def map_preprocessing(img, gt):
   x_data = (255 - img).astype(np.float32) # TODO this is not the same as Dario's one (?)
-  y_data = gt[0:4].astype(np.float32)
+  y_data = gt[0:4]
   return x_data, y_data
 
 # ---- end
@@ -328,9 +331,17 @@ def network_train_generator(model, input_size, data_files,
   backgrounds = np.array([])
   if augmentation and bgs_paths is not None:
     print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
+    # np.random.shuffle(bgs_paths)
+    # bgs_paths = bgs_paths[:100]
     backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
-    if backgrounds.dtype != np.uint8:
+    
+    if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
       backgrounds = (backgrounds * 255).astype('uint8')
+      print('Backgrounds converted from float to uint8')
+    elif backgrounds.dtype != np.uint8:
+      backgrounds = backgrounds.astype('uint8')
+      print('Backgrounds converted from unknown dtype to uint8')
+
     print('Loaded {} backgrounds of shape {}.\n'.format(len(backgrounds), backgrounds.shape[1:]))
 
   # --- Compilation
@@ -373,8 +384,8 @@ def network_train_generator(model, input_size, data_files,
 
   # --- Generator
   
-  # generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, bgs_paths)
-  # generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, bgs_paths)
+  # generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, backgrounds)
+  # generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, backgrounds)
 
   # generator_train = tf.data.Dataset.from_generator(
   #   lambda: data_generator(data_files_train, augmentation, bgs_paths), 
@@ -395,7 +406,7 @@ def network_train_generator(model, input_size, data_files,
   prefetch = True
   prefetch_buffer = tf.data.experimental.AUTOTUNE
   map_parallel = tf.data.experimental.AUTOTUNE
-  map_deter = False
+  map_deter = False # map function parameter deterministic=False improves performances
 
   generator_train = tf.data.Dataset.from_tensor_slices(data_files_train)
   generator_train = generator_train.map(tf_parse_input, map_parallel, map_deter)
@@ -466,13 +477,12 @@ def data_loading(filenames):
   loaded = [np.load(fn, allow_pickle=True) for fn in filenames]
   return np.array(loaded)
 
-def data_augmentation(data, backgrounds_paths):
-  if backgrounds_paths is not None:
+def data_augmentation(data, backgrounds):
+  if backgrounds is not None and len(backgrounds) > 0:
     for frame in data:
-      with open(np.random.choice(backgrounds_paths), 'rb') as fp:
-        bg = pickle.load(fp)
-        frame['image'] = general_utils.image_augment_background(frame['image'], frame['mask'], background = bg)
-        # frame['image'] = general_utils.image_augment_background_minimal(frame['image'], frame['mask'].astype('uint8'), background = bg)
+      bg = backgrounds[np.random.randint(0, len(backgrounds))]
+      frame['image'] = general_utils.image_augment_background(frame['image'], frame['mask'], background = bg)
+      # frame['image'] = general_utils.image_augment_background_minimal(frame['image'], frame['mask'].astype('uint8'), background = bg)
   return data
 
 def data_preprocessing(data, target_slicing):
@@ -483,13 +493,13 @@ def data_preprocessing(data, target_slicing):
 
 class My_Batch_Generator(tf.keras.utils.Sequence):
   
-  def __init__(self, files, batch_size, regression, classification, augmentation, backgrounds_paths):
+  def __init__(self, files, batch_size, regression, classification, augmentation, backgrounds):
     if not regression and not classification:
       raise ValueError('At least one between parameter `regression` and `classification` must be True.')
     self.files = files
     self.batch_size = batch_size
     self.augmentation = augmentation
-    self.backgrounds_paths = backgrounds_paths
+    self.backgrounds = backgrounds
     self.regression = regression
     self.classification = classification
     self.target_slicing = slice(0,8) if regression and classification else (slice(0,4) if regression else slice(4,8))
@@ -500,7 +510,7 @@ class My_Batch_Generator(tf.keras.utils.Sequence):
   def __getitem__(self, idx):
     batch_files = self.files[idx * self.batch_size : (idx+1) * self.batch_size]
     batch_data = data_loading(batch_files)
-    batch_augmented = data_augmentation(batch_data, self.backgrounds_paths) if self.augmentation else batch_data
+    batch_augmented = data_augmentation(batch_data, self.backgrounds) if self.augmentation else batch_data
     batch_x, batch_y = data_preprocessing(batch_augmented, self.target_slicing)
     # # synthetic data
     # batch_x = np.random.random((self.batch_size, 60, 108, 3))
