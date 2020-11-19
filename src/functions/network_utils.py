@@ -252,30 +252,6 @@ def network_train(model, data_x, data_y, regression, classification,
 
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
-# ---- TF Data with generator
-
-def data_generator(files_path, augmentation, backgrounds_paths):
-  for fn in files_path:
-    with open(fn, 'rb') as fp:
-      sample = pickle.load(fp)
-    sample_img = sample_augmentation(sample, backgrounds_paths) if augmentation and backgrounds_paths is not None else sample['image']
-    sample_x, sample_y = sample_preprocessing(sample_img, sample['gt'])
-    # sample_x = np.random.random((60, 108, 3))
-    # sample_y = list(np.random.random((4)))
-    yield sample_x, sample_y
-
-def sample_augmentation(data, backgrounds_paths):
-  with open(np.random.choice(backgrounds_paths), 'rb') as fp:
-    bg = pickle.load(fp)
-  return general_utils.image_augment_background(data['image'], data['mask'], background = bg)
-
-def sample_preprocessing(img, gt):
-  x_data = (255 - img).astype(np.float32)
-  y_data = gt[0:4]
-  return x_data, y_data
-
-# ---- TF Data with proper mapping
-
 def tf_parse_input(filename):
   return tf.numpy_function(
     map_parse_input, 
@@ -319,7 +295,6 @@ def map_preprocessing(img, gt):
   y_data = gt[0:4]
   return x_data, y_data
 
-# ---- end
 
 def network_train_generator(model, input_size, data_files, 
                             regression, classification, augmentation, bgs_paths,
@@ -330,9 +305,9 @@ def network_train_generator(model, input_size, data_files,
 
   backgrounds = np.array([])
   if augmentation and bgs_paths is not None:
+    # np.random.shuffle(bgs_paths) # shuffling before reducing backgrounds
+    # bgs_paths = bgs_paths[:100] # reducing backgrounds cardinality
     print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
-    # np.random.shuffle(bgs_paths)
-    # bgs_paths = bgs_paths[:100]
     backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
     
     if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
@@ -383,25 +358,6 @@ def network_train_generator(model, input_size, data_files,
                                                         shuffle=validation_shuffle, random_state=1)
 
   # --- Generator
-  
-  # generator_train = My_Batch_Generator(data_files_train, batch_size, regression, classification, augmentation, backgrounds)
-  # generator_valid = My_Batch_Generator(data_files_valid, batch_size, regression, classification, augmentation, backgrounds)
-
-  # generator_train = tf.data.Dataset.from_generator(
-  #   lambda: data_generator(data_files_train, augmentation, bgs_paths), 
-  #   output_types=(tf.float32, tf.float32), output_shapes=(input_size, (8 if regression and classification else 4))
-  # )
-  # generator_train = generator_train.batch(batch_size, drop_remainder=True)
-  # generator_train = generator_train.prefetch(5)
-  # # generator_train = generator_train.cache()
-
-  # generator_valid = tf.data.Dataset.from_generator(
-  #   lambda: data_generator(data_files_valid, augmentation, bgs_paths), 
-  #   output_types=(tf.float32, tf.float32), output_shapes=(input_size, (8 if regression and classification else 4))
-  # )
-  # generator_valid = generator_valid.batch(batch_size, drop_remainder=True)
-  # generator_valid = generator_valid.prefetch(5)
-  # # generator_valid = generator_valid.cache()
 
   prefetch = True
   prefetch_buffer = tf.data.experimental.AUTOTUNE
@@ -433,9 +389,7 @@ def network_train_generator(model, input_size, data_files,
 
   history = model.fit(
       x = generator_train,
-      # steps_per_epoch = int(len(data_files_train) // batch_size),
       validation_data = generator_valid,
-      # validation_steps = int(len(data_files_valid) // batch_size),
       epochs = epochs,
       callbacks = callbacks,
       verbose = verbose
@@ -443,79 +397,8 @@ def network_train_generator(model, input_size, data_files,
 
   if time_train:
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
-  
-  # # move before training
-  # # for profiling non-tf operations, see https://www.tensorflow.org/guide/profiler#events and disable tensorboard callback
-  # # this only works on tf version >= 2.3, so cannot be tested in windows (https://github.com/tensorflow/tensorflow/issues/38518#issuecomment-686790002)
-  # if use_profiler:
-  #   tf.profiler.experimental.start(profiler_dir, tf.profiler.experimental.ProfilerOptions(host_tracer_level=2, python_tracer_level=1, device_tracer_level=1))
-  # # move after training
-  # if use_profiler:
-  #   tf.profiler.experimental.stop()
 
   return model, history
-
-
-# ---- Old generator
-
-def maskrcnn_transform_networkdata(images, actuals):
-  image_size = images[0].shape
-  x_data = 255 - images
-  x_data = np.vstack(x_data[:]).astype(np.float32)
-  x_data = np.reshape(x_data, (-1, image_size[0], image_size[1], image_size[2]))
-  # x_data = images
-  
-  yr = np.transpose(actuals[:,0:4])     # shape (regr_variables, samples) (4, ?)
-  cat = to_categorical(actuals[:,4:8])  # shape (samples, class_variables, categorical) (?, 4, 3)
-  yc = np.transpose(cat, (1, 0, 2))     # shape (class_variables, samples, categorical) (4, ?, 3)
-  y_data = [yr[0], yr[1], yr[2], yr[3], yc[0], yc[1], yc[2], yc[3]]
-  # y_data = [yr[0], yr[1], yr[2], yr[3], 0, 0, 0, 0]
-
-  return x_data, y_data
-
-def data_loading(filenames):
-  loaded = [np.load(fn, allow_pickle=True) for fn in filenames]
-  return np.array(loaded)
-
-def data_augmentation(data, backgrounds):
-  if backgrounds is not None and len(backgrounds) > 0:
-    for frame in data:
-      bg = backgrounds[np.random.randint(0, len(backgrounds))]
-      frame['image'] = general_utils.image_augment_background(frame['image'], frame['mask'], background = bg)
-      # frame['image'] = general_utils.image_augment_background_minimal(frame['image'], frame['mask'].astype('uint8'), background = bg)
-  return data
-
-def data_preprocessing(data, target_slicing):
-  images = np.array([d['image'] for d in data])
-  actuals = np.array([d['gt'] for d in data]) # https://stackoverflow.com/a/46317786/10866825
-  data_x, data_y = maskrcnn_transform_networkdata(images, actuals)
-  return data_x, data_y[target_slicing]
-
-class My_Batch_Generator(tf.keras.utils.Sequence):
-  
-  def __init__(self, files, batch_size, regression, classification, augmentation, backgrounds):
-    if not regression and not classification:
-      raise ValueError('At least one between parameter `regression` and `classification` must be True.')
-    self.files = files
-    self.batch_size = batch_size
-    self.augmentation = augmentation
-    self.backgrounds = backgrounds
-    self.regression = regression
-    self.classification = classification
-    self.target_slicing = slice(0,8) if regression and classification else (slice(0,4) if regression else slice(4,8))
-    
-  def __len__(self):
-    return (np.ceil(len(self.files) / float(self.batch_size))).astype(np.int)
-  
-  def __getitem__(self, idx):
-    batch_files = self.files[idx * self.batch_size : (idx+1) * self.batch_size]
-    batch_data = data_loading(batch_files)
-    batch_augmented = data_augmentation(batch_data, self.backgrounds) if self.augmentation else batch_data
-    batch_x, batch_y = data_preprocessing(batch_augmented, self.target_slicing)
-    # # synthetic data
-    # batch_x = np.random.random((self.batch_size, 60, 108, 3))
-    # batch_y = list(np.random.random((4, self.batch_size)))
-    return batch_x, batch_y
 
 
 ### --------------------- METRICS --------------------- ###

@@ -10,7 +10,7 @@ C:/Users/96mar/Desktop/meeting_dario/data/orig_train_63720/ ^
 --verbose 2 ^
 --lr_reducer ^
 --profiler_dir C:\Temp\venv\logs\tfdata ^
---augmentation ^    
+--augmentation ^
 --bgs_folder C:/Users/96mar/Desktop/meeting_dario/data/indoorCVPR_09_PPDario_uint8 ^
 --bgs_name indoorCVPR_PPDario ^
 --save_folder ./../../dev-models/training_generator ^

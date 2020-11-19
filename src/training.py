@@ -97,8 +97,9 @@ def train_with_generator(data_folder, network_weights_path, data_size,
     else:
       initial_weights = None
 
-    # replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'jpg') if augmentation and backgrounds_folder is not None else None
-    replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle') if augmentation and backgrounds_folder is not None else None
+    replace_imgs_paths = None
+    if augmentation and backgrounds_folder is not None:
+      replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle')
 
     model = network_utils.network_create(
       input_shape, regression, classification, 
