@@ -65,41 +65,48 @@ from functions import network_utils
 ### FUNCTIONS
 ######
 
-def train_with_generator(data_folder, network_weights_path, data_size,
+def train_with_generator(data_folder, network_weights_path, data_len,
                          regression, classification,
                          retrain_from, verbose, batch_size, epochs,
                          use_lr_reducer, use_early_stop, 
                          use_profiler, profile_dir,
-                         augmentation, backgrounds_folder, backgrounds_name,
+                         backgrounds_folder, backgrounds_len, backgrounds_name,
+                         augmentation,
                          view_stats, save_stats, save_model, save_folder):
     
     list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
-    list_files = list_files[:data_size]
+    list_files = list_files[:data_len]
 
-    with open(list_files[0], 'br') as first:
-        input_shape = pickle.load(first)['image'].shape
-
-    timestr = time.strftime("%Y%m%d_%H%M%S")
-    model_name = '{} {} - {}{}_size{}_{}{}_ep{}'.format(
-        timestr,
-        socket.gethostname(),
-        'regr' if regression else '', 
-        'class' if classification else '', 
-        len(list_files),
-        'retrainfrom{}'.format(retrain_from) if retrain_from else 'notrain',
-        '_augm_{}'.format(backgrounds_name) if augmentation else '',
-        epochs
-    )
-    
     if network_weights_path is not None and os.path.exists(network_weights_path):
       with open(network_weights_path, 'rb') as fp:
         initial_weights = pickle.load(fp)
     else:
       initial_weights = None
 
-    replace_imgs_paths = None
-    if augmentation and backgrounds_folder is not None:
-      replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle')
+    replace_imgs_paths = []
+    if backgrounds_folder is not None:
+      replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle', recursive=True)
+      if backgrounds_len is not None:
+        np.random.seed(1) # TODO remove seed
+        np.random.shuffle(replace_imgs_paths) # shuffling before reducing backgrounds
+        replace_imgs_paths = replace_imgs_paths[:backgrounds_len] # reducing backgrounds cardinality
+
+    timestr = time.strftime("%Y%m%d_%H%M%S")
+    model_name = '{0} {1} - {2}{3}_len{4}_{5}_{6}{7}{8}_ep{9}'.format(
+        timestr,                                    # 0
+        socket.gethostname(),                       # 1
+        'regr' if regression else '',               # 2
+        'class' if classification else '',          # 3
+        len(list_files),                            # 4
+        'rw' if initial_weights is None else 'ow',  # 5
+        'trainfrom{}'.format(retrain_from) if retrain_from else 'notrain', # 6 optional
+        '_{}(len{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths)) if len(replace_imgs_paths) > 0 else '', # 7 optional
+        '_augm' if augmentation else '',            # 8
+        epochs                                    # 9
+    )
+
+    with open(list_files[0], 'br') as first:
+        input_shape = pickle.load(first)['image'].shape
 
     model = network_utils.network_create(
       input_shape, regression, classification, 
@@ -109,7 +116,7 @@ def train_with_generator(data_folder, network_weights_path, data_size,
     model, history = network_utils.network_train_generator(
       model, input_shape, list_files, 
       regression, classification, 
-      augmentation, replace_imgs_paths, 
+      replace_imgs_paths, augmentation,
       batch_size, epochs, verbose, 
       use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
       use_profiler=use_profiler, profiler_dir=profile_dir
@@ -146,7 +153,7 @@ def get_args():
 
   default_batch_size = 64
   default_epochs = 30
-  debug_data_size = 64
+  debug_data_len = 64
   debug_batch_size = 4
   debug_epochs = 2
 
@@ -155,7 +162,7 @@ def get_args():
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
   parser.add_argument('-r', '--regression', action='store_true', help='specify the argument if you want to perform regression')
   parser.add_argument('-c', '--classification', action='store_true', help='specify the argument if you want to perform classification')
-  parser.add_argument('--data_size', type=int, default=None, metavar='DS', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_size))
+  parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
   parser.add_argument('--batch_size', type=int, default=default_batch_size, metavar='BS', help='training batch size (default = {}, debug = {})'.format(default_batch_size, debug_batch_size))
   parser.add_argument('--epochs', type=int, default=default_epochs, metavar='E', help='number of training epochs (default = {}, debug = {})'.format(default_epochs, debug_epochs))
   parser.add_argument('--weights_path', type=file_path, metavar='WP', help='path to the network initial weights dictionary {"layer_name": get_weights}') # required
@@ -165,16 +172,17 @@ def get_args():
   parser.add_argument('--early_stop', action='store_true', help='specify the argument if you want to use early stop callback')
   parser.add_argument('--profiler', action='store_true', help='specify the argument if you want to use TensorBoard profiler callback')
   parser.add_argument('--profiler_dir', type=dir_path, metavar='PD', help='path in which to save TensorBoard logs')
-  parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform data augmentation')
-  parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder for data augmentation')
-  parser.add_argument('--bgs_name', type=str, metavar='BGN', help='name/identifier of the chosen backgrounds set')
+  parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
+  parser.add_argument('--bgs_len', type=int, default=None, metavar='BL', help='max number of backgrounds to consider (default = entire bgs_folder content)')
+  parser.add_argument('--bgs_name', type=str, default=None, metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
+  parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform standard image augmentation')
   parser.add_argument('--save', action='store_true', help='specify the argument if you want to save the model and metrics')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save the model and metrics')
   parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
 
   parsed_args = parser.parse_args()
   if parsed_args.debug:
-    parsed_args.data_size = debug_data_size
+    parsed_args.data_len = debug_data_len
     parsed_args.batch_size = debug_batch_size
     parsed_args.epochs = debug_epochs
 
@@ -215,9 +223,9 @@ if __name__ == "__main__":
   ## --- Training
 
   train_with_generator(
-    args.data_folder, args.weights_path, args.data_size, args.regression, args.classification,
+    args.data_folder, args.weights_path, args.data_len, args.regression, args.classification,
     args.retrain_from, args.verbose, args.batch_size, args.epochs,
     args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
-    args.augmentation, args.bgs_folder, args.bgs_name,
+    args.bgs_folder, args.bgs_len, args.bgs_name, args.augmentation,
     view_stats=False, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )

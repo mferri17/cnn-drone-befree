@@ -252,63 +252,66 @@ def network_train(model, data_x, data_y, regression, classification,
 
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
-def tf_parse_input(filename):
-  return tf.numpy_function(
+
+img_counter = 0
+def save_img(img):
+  global img_counter
+  img_counter += 1
+  plt.imsave('C:/Temp/venv/images/{:05d}.jpg'.format(img_counter), cv2.resize(img, (600,400)))
+
+
+def tf_parse_input(filename, backgrounds):
+  img, mask, gt = tf.numpy_function(
     map_parse_input, 
     [filename], 
     [tf.uint8, tf.uint8, tf.float64], 
     'map_parse_input')
+
+  if backgrounds.shape[0] > 0: # backgrounds shape is known at graph definition
+    valid_shapes = tf.math.reduce_all(tf.math.equal(tf.shape(mask), tf.shape(img)[:-1]))
+    
+    if valid_shapes: # mask shape is dynamic
+      ridx = tf.random.uniform(shape=[], minval=0, maxval=len(backgrounds), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
+      bg = backgrounds[ridx]
+      mask_stack = mask[:,:,np.newaxis] # Add 3rd dimension for broadcasting
+      img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
+    # else:
+    #   tf.numpy_function(save_img, [img], [], 'save_img')
+
+  return img, gt
+
 
 def map_parse_input(filename):
   with open(filename, 'rb') as fp:
     sample = pickle.load(fp)
   return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float64')
 
-def tf_augmentation(img, mask, gt, augmentation, backgrounds):
-  if backgrounds is None:
-    backgrounds = [] # None is not convertible to Tensor
-  return tf.numpy_function(
-    map_augmentation, 
-    [img, mask, gt, augmentation, backgrounds], 
-    [tf.uint8, tf.float64], 
-    'map_augmentation')
 
-def map_augmentation(img, mask, gt, augmentation, backgrounds):
+def tf_preprocessing(img, gt, augmentation):
   if augmentation:
-    if len(backgrounds) > 0:
-      bg = backgrounds[np.random.randint(0, len(backgrounds))]
-      img = general_utils.image_augment_background_minimal(img, mask, bg)
-  return img, gt
+    pass
 
-def tf_preprocessing(img, gt):
-  x, y = tf.numpy_function(
-    map_preprocessing, 
-    [img, gt], 
-    [tf.float32, tf.float64], 
-    'map_preprocessing')
   # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
+  x = tf.cast((255 - img), tf.float32)
+  y = gt[0:4] # TODO add classification
   y = {'x_pred': y[0], 'y_pred': y[1], 'z_pred': y[2], 'yaw_pred': y[3]}
   return x, y
-  
-def map_preprocessing(img, gt):
-  x_data = (255 - img).astype(np.float32) # TODO this is not the same as Dario's one (?)
-  y_data = gt[0:4]
-  return x_data, y_data
 
 
 def network_train_generator(model, input_size, data_files, 
-                            regression, classification, augmentation, bgs_paths,
+                            regression, classification, bgs_paths, augmentation,
                             batch_size = 64, epochs = 30, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
                             use_profiler = False, profiler_dir = '.\\logs', time_train = True):
 
+  # --- Backgrounds management
+
   backgrounds = np.array([])
-  if augmentation and bgs_paths is not None:
-    # np.random.shuffle(bgs_paths) # shuffling before reducing backgrounds
-    # bgs_paths = bgs_paths[:100] # reducing backgrounds cardinality
+  if bgs_paths is not None and len(bgs_paths) > 0:  
     print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
     backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
+    backgrounds = tf.convert_to_tensor(backgrounds) # saves time during runtime
     
     if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
       backgrounds = (backgrounds * 255).astype('uint8')
@@ -355,7 +358,7 @@ def network_train_generator(model, input_size, data_files,
     
   from sklearn.model_selection import train_test_split
   data_files_train, data_files_valid = train_test_split(data_files, test_size=validation_split, 
-                                                        shuffle=validation_shuffle, random_state=1)
+                                                        shuffle=validation_shuffle, random_state=1) # TODO remove seed
 
   # --- Generator
 
@@ -365,15 +368,13 @@ def network_train_generator(model, input_size, data_files,
   map_deter = False # map function parameter deterministic=False improves performances
 
   generator_train = tf.data.Dataset.from_tensor_slices(data_files_train)
-  generator_train = generator_train.map(tf_parse_input, map_parallel, map_deter)
-  generator_train = generator_train.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, backgrounds), map_parallel, map_deter)
-  generator_train = generator_train.map(lambda img, gt : tf_preprocessing(img, gt), map_parallel, map_deter)
+  generator_train = generator_train.map(lambda filename: tf_parse_input(filename, backgrounds), map_parallel, map_deter)
+  generator_train = generator_train.map(lambda img, gt: tf_preprocessing(img, gt, augmentation), map_parallel, map_deter)
   generator_train = generator_train.batch(batch_size, drop_remainder=True)
 
   generator_valid = tf.data.Dataset.from_tensor_slices(data_files_valid)
-  generator_valid = generator_valid.map(tf_parse_input, map_parallel, map_deter)
-  generator_valid = generator_valid.map(lambda img, mask, gt : tf_augmentation(img, mask, gt, augmentation, backgrounds), map_parallel, map_deter)
-  generator_valid = generator_valid.map(lambda img, gt : tf_preprocessing(img, gt), map_parallel, map_deter)
+  generator_valid = generator_valid.map(lambda filename: tf_parse_input(filename, backgrounds), map_parallel, map_deter)
+  generator_valid = generator_valid.map(lambda img, gt: tf_preprocessing(img, gt, augmentation), map_parallel, map_deter)
   generator_valid = generator_valid.batch(batch_size, drop_remainder=True)
   
   if prefetch:

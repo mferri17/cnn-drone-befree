@@ -482,7 +482,7 @@ def image_background_replace_grabcut(img, mode, rect_person, rect_face, iteratio
 
   # --- Blend masked img into backgrounds
 
-  mask_stack = mask_smoothed[:,:,np.newaxis]    # Create 3-channel alpha mask
+  mask_stack = mask_smoothed[:,:,np.newaxis]    # Add 3rd dimension for broadcasting
   img        = img.astype('float32') / 255.0    # For easy blending
 
   result = []
@@ -565,7 +565,7 @@ def image_background_replace_mask(img, mask, smooth = True,
 
   # --- Blend masked img into backgrounds
 
-  mask_stack = mask_smoothed[:,:,np.newaxis]    # Create 3-channel alpha mask
+  mask_stack = mask_smoothed[:,:,np.newaxis]    # Add 3rd dimension for broadcasting
   img        = img.astype('float32') / 255.0    # For easy blending
 
   result = []
@@ -630,7 +630,7 @@ def image_augment_background(img, mask, background, smooth = True):
 
   # --- Blend masked img into backgrounds
 
-  mask_stack = mask_smoothed[:,:,np.newaxis]    # Create 3-channel alpha mask
+  mask_stack = mask_smoothed[:,:,np.newaxis]    # Add 3rd dimension for broadcasting
   img        = img.astype('float32') / 255.0    # For easy blending
 
   try:
@@ -666,7 +666,7 @@ def image_augment_background_minimal(img, mask, background):
   if mask.shape != img.shape[:-1]:
     return img # some images may not have a mask
 
-  mask_stack = mask[:,:,np.newaxis]                             # Create 3-channel alpha mask
+  mask_stack = mask[:,:,np.newaxis]                             # Add 3rd dimension for broadcasting
   masked = (mask_stack * img) + ((1-mask_stack) * background)   # Blend
     
   return masked
