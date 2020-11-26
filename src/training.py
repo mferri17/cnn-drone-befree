@@ -71,7 +71,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
                          use_lr_reducer, use_early_stop, 
                          use_profiler, profile_dir,
                          backgrounds_folder, backgrounds_len, backgrounds_name,
-                         augmentation,
+                         augmentation_prob,
                          view_stats, save_stats, save_model, save_folder):
     
     list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
@@ -99,10 +99,10 @@ def train_with_generator(data_folder, network_weights_path, data_len,
         'class' if classification else '',          # 3
         len(list_files),                            # 4
         'rw' if initial_weights is None else 'ow',  # 5
-        'trainfrom{}'.format(retrain_from) if retrain_from else 'notrain', # 6 optional
+        'trainfrom{}'.format(retrain_from) if retrain_from else 'notrain',    # 6 optional
         '_{}(len{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths)) if len(replace_imgs_paths) > 0 else '', # 7 optional
-        '_augm' if augmentation else '',            # 8
-        epochs                                    # 9
+        '_augm{}'.format(augmentation_prob) if augmentation_prob > 0 else '', # 8 optional
+        epochs                                      # 9
     )
 
     with open(list_files[0], 'br') as first:
@@ -116,7 +116,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
     model, history = network_utils.network_train_generator(
       model, input_shape, list_files, 
       regression, classification, 
-      replace_imgs_paths, augmentation,
+      replace_imgs_paths, augmentation_prob,
       batch_size, epochs, verbose, 
       use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
       use_profiler=use_profiler, profiler_dir=profile_dir
@@ -175,7 +175,8 @@ def get_args():
   parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
   parser.add_argument('--bgs_len', type=int, default=None, metavar='BL', help='max number of backgrounds to consider (default = entire bgs_folder content)')
   parser.add_argument('--bgs_name', type=str, default=None, metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
-  parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform standard image augmentation')
+  # parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform standard image augmentation')
+  parser.add_argument('--aug_prob', type=float, default=0, metavar='AP', help='probability of performing image augmentation on each sample')
   parser.add_argument('--save', action='store_true', help='specify the argument if you want to save the model and metrics')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save the model and metrics')
   parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
@@ -226,6 +227,6 @@ if __name__ == "__main__":
     args.data_folder, args.weights_path, args.data_len, args.regression, args.classification,
     args.retrain_from, args.verbose, args.batch_size, args.epochs,
     args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
-    args.bgs_folder, args.bgs_len, args.bgs_name, args.augmentation,
+    args.bgs_folder, args.bgs_len, args.bgs_name, args.aug_prob,
     view_stats=False, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )

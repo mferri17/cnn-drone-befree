@@ -14,8 +14,11 @@ From: tensorflow/tensorflow:latest-gpu
 %post
 
 apt-get update && apt-get -y install git wget nano python3-pip tree
+# sudo apt-get install libxrender1
 python3 -m pip install image matplotlib numpy pandas opencv-python scikit-learn 
 python3 -m pip install tf-keras-vis tensorboard tensorboard_plugin_profile
+python3 -m pip install albumentations 
+# imgaug imagecorruptions
 
 
 
