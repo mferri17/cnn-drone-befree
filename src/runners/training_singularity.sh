@@ -13,10 +13,9 @@ CUDA_VISIBLE_DEVICES=1 python3 ./training.py \
 --retrain_from 0 \
 --verbose 1 \
 --lr_reducer \
---profiler_dir /project/logs \
---bgs_len 100 \
+--bgs_len 1000 \
 --bgs_folder /project/backgrounds/indoorCVPR_09_PPDario_uint8 \
---bgs_name bg_test \
---augmentation \
+--bgs_name indoorCVPR_PPDario \
+--aug_prob 0.95 \
 --save_folder /project/save \
 --debug

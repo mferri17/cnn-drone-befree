@@ -259,16 +259,27 @@ def save_img(img):
   plt.imsave('C:/Temp/venv/images/{:05d}.jpg'.format(img_counter), cv2.resize(img, (600,400)))
 
 
-def map_parse_input(filename, img_shape, backgrounds):
+def map_parse_input(filename, img_shape):
   img, mask, gt = tf.numpy_function(
     tf_parse_input, 
     [filename], 
     [tf.uint8, tf.uint8, tf.float64], 
     'tf_parse_input')
 
+  img.set_shape(img_shape)
+  gt.set_shape(8)
+
+  return img, mask, gt
+
+def tf_parse_input(filename):
+  with open(filename, 'rb') as fp:
+    sample = pickle.load(fp)
+  return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float64')
+
+
+def map_replace_background(img, mask, gt, backgrounds):
   if backgrounds.shape[0] > 0: # backgrounds shape is known at graph definition
     valid_shapes = tf.math.reduce_all(tf.math.equal(tf.shape(mask), tf.shape(img)[:-1]))
-    
     if valid_shapes: # mask shape is dynamic
       ridx = tf.random.uniform(shape=[], minval=0, maxval=len(backgrounds), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
       bg = backgrounds[ridx]
@@ -276,17 +287,7 @@ def map_parse_input(filename, img_shape, backgrounds):
       img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
     # else:
     #   tf.numpy_function(save_img, [img], [], 'save_img')
-
-  img.set_shape(img_shape)
-  gt.set_shape(8)
-
   return img, gt
-
-
-def tf_parse_input(filename):
-  with open(filename, 'rb') as fp:
-    sample = pickle.load(fp)
-  return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float64')
 
 
 def map_preprocessing(img, gt, aug_prob):
@@ -349,7 +350,7 @@ def network_train_generator(model, input_size, data_files,
     callbacks.append(early_stop)
 
   if use_profiler:
-    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,20')
+    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,100')
     callbacks.append(tensorboard)
 
   # --- Backgrounds management
@@ -377,21 +378,26 @@ def network_train_generator(model, input_size, data_files,
 
   # --- Generator
 
-  def make_generator(files, prefetch=True, parallelize=True, deterministic=False):
+  def make_generator(files, prefetch=True, parallelize=True, deterministic=False, cache=False, data_len=None, repeat=1):
     map_parallel = tf.data.experimental.AUTOTUNE if parallelize else None
 
     gen = tf.data.Dataset.from_tensor_slices(files)
-    gen = gen.map(lambda filename: map_parse_input(filename, input_size, backgrounds), map_parallel, deterministic)
+    gen = gen.map(lambda filename: map_parse_input(filename, input_size), map_parallel, deterministic)
+    if cache:
+      gen = gen.cache()
+      gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
+    gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds), map_parallel, deterministic)
     gen = gen.map(lambda img, gt: map_preprocessing(img, gt, aug_prob), map_parallel, deterministic)
     gen = gen.batch(batch_size, drop_remainder=True)
+    gen = gen.repeat(repeat)
     if prefetch:
       gen = gen.prefetch(tf.data.experimental.AUTOTUNE)
 
     return gen
 
 
-  generator_train = make_generator(data_files_train, prefetch=True, parallelize=True)
-  generator_valid = make_generator(data_files_valid, prefetch=True, parallelize=True)
+  generator_train = make_generator(data_files_train, cache=True, data_len=len(data_files_train), repeat=3)
+  generator_valid = make_generator(data_files_valid, cache=True, data_len=len(data_files_valid))
 
   # --- Training
 
