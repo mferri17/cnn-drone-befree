@@ -303,14 +303,11 @@ def map_preprocessing(img, gt, aug_prob):
 
 def tf_augmentation(img, aug_prob):
   augmenter = A.Compose([
-      A.RandomBrightnessContrast(brightness_limit=(-0.2, 0.3), p=0.8),    
-      A.RandomGamma(p=0.8), 
-      A.CLAHE(p=0.5), 
-      A.HueSaturationValue(p=0.5),
-      A.OneOf([
-          A.GaussNoise(p=1),
-          A.ISONoise(p=1),
-      ], p=0.5),
+      A.RandomBrightnessContrast(brightness_limit=(-0.2, 0.3), p=0.75),    
+      A.RandomGamma(p=0.75), 
+      A.CLAHE(p=0.5),
+      A.HueSaturationValue(p=0.25),
+      A.MultiplicativeNoise(per_channel=True, elementwise=True, p=0.25), # most efficient noise, still time consuming
   ], p=aug_prob)  
   img = augmenter(image=img)['image']
   return img

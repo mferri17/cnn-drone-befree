@@ -66,16 +66,9 @@ else:
 my = A.Compose([
     A.RandomBrightnessContrast(brightness_limit=(-0.2, 0.3), p=1),    
     A.RandomGamma(p=1), 
-    A.CLAHE(p=0.5), 
-    A.HueSaturationValue(p=0.5),
-    A.OneOf([
-        A.GaussNoise(var_limit=100, p=1),
-        A.ISONoise(intensity=(0,1), p=1),
-    ], p=0.5),
+    A.CLAHE(p=1), 
+    A.HueSaturationValue(p=1),
+    A.MultiplicativeNoise(per_channel=True, elementwise=True, p=1), # time consuming, remove for performance optimization
 ], p=1)
 
-print(my)
-print(type(my) == A.core.composition.Compose)
-print(my is not None)
-
-# augment_and_show(my, samples, backgrounds)
+augment_and_show(my, samples, backgrounds)
