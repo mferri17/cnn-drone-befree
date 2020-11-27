@@ -92,17 +92,18 @@ def train_with_generator(data_folder, network_weights_path, data_len,
         replace_imgs_paths = replace_imgs_paths[:backgrounds_len] # reducing backgrounds cardinality
 
     timestr = time.strftime("%Y%m%d_%H%M%S")
-    model_name = '{0} {1} - {2}{3}_len{4}_{5}_{6}{7}{8}_ep{9}'.format(
+    model_name = '{0} {1} - {2}{3}_len{4}_b{5}_{6}w_{7}{8}{9}_ep{10}'.format(
         timestr,                                    # 0
-        socket.gethostname(),                       # 1
+        socket.gethostname().replace('.','_'),      # 1
         'regr' if regression else '',               # 2
         'class' if classification else '',          # 3
         len(list_files),                            # 4
-        'rw' if initial_weights is None else 'ow',  # 5
-        'trainfrom{}'.format(retrain_from) if retrain_from else 'notrain',    # 6 optional
-        '_{}(len{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths)) if len(replace_imgs_paths) > 0 else '', # 7 optional
-        '_augm{}'.format(augmentation_prob) if augmentation_prob > 0 else '', # 8 optional
-        epochs                                      # 9
+        batch_size,                                 # 5
+        'r' if initial_weights is None else 'o',    # 6
+        'trainfrom{}'.format(retrain_from) if retrain_from is not None else 'notrain',    # 7 optional
+        '_{}(len{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths)) if len(replace_imgs_paths) > 0 else '', # 8 optional
+        '_augm{}'.format(str(augmentation_prob).replace('.','')) if augmentation_prob > 0 else '', # 9 optional
+        epochs                                      # 10
     )
 
     with open(list_files[0], 'br') as first:
