@@ -77,7 +77,7 @@ def create_datetime_folder(base_folder, notes = ''):
         path (str): Complete path to the created folder
   '''
   timestr = time.strftime("%Y%m%d_%H%M%S")
-  path = base_folder + timestr + ' ' + notes + '/'
+  path = base_folder + timestr + ((' ' + notes) if notes != '' else '') + '/'
   create_folder_if_not_exist(path)
   return path
 
