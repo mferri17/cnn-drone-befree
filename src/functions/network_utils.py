@@ -304,12 +304,24 @@ def map_preprocessing(img, gt, aug_prob):
 
 def tf_augmentation(img, aug_prob):
   augmenter = A.Compose([
-      A.RandomBrightnessContrast(brightness_limit=(-0.2, 0.3), p=0.75),    
-      A.RandomGamma(p=0.75), 
-      A.CLAHE(p=0.5),
-      A.HueSaturationValue(p=0.25),
-      A.MultiplicativeNoise(per_channel=True, elementwise=True, p=0.25), # most efficient noise, still time consuming
-  ], p=aug_prob)  
+        A.RandomBrightnessContrast(brightness_by_max=True, p=0.9), # 0.77 sec
+        A.Solarize(threshold=225, p=0.2), # 0.81 sec
+        A.Equalize(by_channels=True, p=0.1), # 0.97 sec
+        A.OneOf([
+            A.ChannelDropout(fill_value=96, p=0.2), # 0.52 sec
+            A.ChannelShuffle(p=0.8), # 0.44 sec
+        ], p=0.3),
+        A.MultiplicativeNoise(multiplier=(0.85, 1.15), per_channel=True, elementwise=True, p=0.3), # 6.89 sec
+        A.CoarseDropout(min_holes=20, max_holes=70, min_height=1, max_height=4, min_width=1, max_width=4, p=0.3), # 3.78 sec
+        A.OneOf([
+            A.ToGray(p=0.5), # 0.34 sec
+            A.InvertImg(p=0.5), # 0.36 sec
+        ], p=0.1),
+        A.OneOf([
+            A.Blur(blur_limit=3, p=0.5), # 0.58 sec
+            A.MotionBlur(blur_limit=4, p=0.5), # 0.97 sec
+        ], p=0.05),
+    ], p=aug_prob)
   img = augmenter(image=img)['image']
   return img
 
