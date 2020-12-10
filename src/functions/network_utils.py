@@ -295,6 +295,11 @@ def map_preprocessing(img, gt, aug_prob):
     img_shape = img.shape
     img = tf.numpy_function(tf_augmentation, [img, aug_prob], tf.uint8, 'tf_augmentation')
     img.set_shape(img_shape)
+    
+    if tf.random.uniform([]) < 0.5: # 0.5% probability of flipping horizontally
+      img = tf.image.flip_left_right(img)
+      gt = tf.convert_to_tensor([gt[0], -gt[1], gt[2], -gt[3]]) # invert Y and YAW
+      # TODO add classification
 
   # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
   x = tf.cast((255 - img), tf.float32)
