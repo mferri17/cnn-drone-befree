@@ -67,7 +67,7 @@ from functions import network_utils
 
 def train_with_generator(data_folder, network_weights_path, data_len,
                          regression, classification,
-                         retrain_from, verbose, batch_size, epochs,
+                         retrain_from, verbose, batch_size, epochs, oversampling,
                          use_lr_reducer, use_early_stop, 
                          use_profiler, profile_dir,
                          backgrounds_folder, backgrounds_len, backgrounds_name,
@@ -118,7 +118,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
       model, input_shape, list_files, 
       regression, classification, 
       replace_imgs_paths, augmentation_prob,
-      batch_size, epochs, verbose, 
+      batch_size, epochs, oversampling, verbose, 
       use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
       use_profiler=use_profiler, profiler_dir=profile_dir
     )
@@ -166,6 +166,7 @@ def get_args():
   parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
   parser.add_argument('--batch_size', type=int, default=default_batch_size, metavar='BS', help='training batch size (default = {}, debug = {})'.format(default_batch_size, debug_batch_size))
   parser.add_argument('--epochs', type=int, default=default_epochs, metavar='E', help='number of training epochs (default = {}, debug = {})'.format(default_epochs, debug_epochs))
+  parser.add_argument('--oversampling', type=int, default=1, metavar='OS', help='number of times the dataset has to be repeated for each epoch (default = 1)')
   parser.add_argument('--weights_path', type=file_path, metavar='WP', help='path to the network initial weights dictionary {"layer_name": get_weights}') # required
   parser.add_argument('--retrain_from', type=int, default=None, metavar='RF', help='number of layer to retrain from (default = no training, 0 = complete training)')
   parser.add_argument('--verbose', type=int, default=2, metavar='VER', help='keras training verbosity (0: silent, 1: complete, 2: one line per epoch')
@@ -226,7 +227,7 @@ if __name__ == "__main__":
 
   train_with_generator(
     args.data_folder, args.weights_path, args.data_len, args.regression, args.classification,
-    args.retrain_from, args.verbose, args.batch_size, args.epochs,
+    args.retrain_from, args.verbose, args.batch_size, args.epochs, args.oversampling,
     args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
     args.bgs_folder, args.bgs_len, args.bgs_name, args.aug_prob,
     view_stats=False, save_stats=args.save, save_model=args.save, save_folder=args.save_folder

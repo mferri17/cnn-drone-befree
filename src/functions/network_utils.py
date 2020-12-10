@@ -303,7 +303,8 @@ def map_preprocessing(img, gt, aug_prob):
 
   # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
   x = tf.cast((255 - img), tf.float32)
-  y = gt[0:4] # TODO add classification
+  # TODO add classification
+  y = gt[0:4]
   y = {'x_pred': y[0], 'y_pred': y[1], 'z_pred': y[2], 'yaw_pred': y[3]}
   return x, y
 
@@ -331,9 +332,16 @@ def tf_augmentation(img, aug_prob):
   return img
 
 
+def r2_keras(y_true, y_pred):
+  # from https://www.kaggle.com/c/mercedes-benz-greener-manufacturing/discussion/34019
+  SS_res =  K.sum(K.square(y_true - y_pred)) 
+  SS_tot = K.sum(K.square(y_true - K.mean(y_true))) 
+  return (1 - SS_res/(SS_tot + K.epsilon()))
+
+
 def network_train_generator(model, input_size, data_files, 
                             regression, classification, bgs_paths, aug_prob,
-                            batch_size = 64, epochs = 30, verbose = 2,
+                            batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
                             use_profiler = False, profiler_dir = '.\\logs', time_train = True):
@@ -346,6 +354,7 @@ def network_train_generator(model, input_size, data_files,
   if regression:
     loss.extend(['mean_absolute_error'] * 4)
     metrics.append('mse')
+    metrics.append(r2_keras)
   if classification:
     loss.extend(['categorical_crossentropy'] * 4)
     metrics.append('accuracy')
@@ -413,7 +422,7 @@ def network_train_generator(model, input_size, data_files,
     return gen
 
 
-  generator_train = make_generator(data_files_train, cache=True, data_len=len(data_files_train), repeat=3)
+  generator_train = make_generator(data_files_train, cache=True, data_len=len(data_files_train), repeat=oversampling)
   generator_valid = make_generator(data_files_valid, cache=True, data_len=len(data_files_valid))
 
   # --- Training
@@ -441,38 +450,60 @@ def network_train_generator(model, input_size, data_files,
 
 
 def network_stats(history, regression, classification, view, save, save_folder = '', save_name = ''):
-  
-  if classification:
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,6))
-  else:
-    fig, ax1 = plt.subplots(1, 1, figsize=(10,6))
 
-  var_str = 'all_class'
+  history = history.history
+  if regression and classification:
+    fig, axs = plt.subplots(1, 3, figsize=(15,5))
+  else:
+    fig, axs = plt.subplots(1, 2, figsize=(10,5))
+
   fig.suptitle(save_name)
 
   # - Loss
 
-  ax1.plot(history.history['loss'], 'k--', label='Train Loss')
-  ax1.plot(history.history['val_loss'], 'k', label='Valid Loss')
-  ax1.legend(loc='upper right')
-  ax1.set_xlabel('Epoch')
-  ax1.set_title(var_str + ' training and validation Loss')
+  axs[0].plot(history['loss'], 'k--', label='Train Loss')
+  axs[0].plot(history['val_loss'], 'k', label='Valid Loss')
+  axs[0].legend(loc='upper right')
+  axs[0].set_xlabel('Epoch')
+  axs[0].set_title('Loss')
+  print('Train Loss: \t\t', history['loss'][-1])
+  print('Valid Loss: \t\t', history['val_loss'][-1])
+
+  # - R2
+  
+  if regression:
+    axs[1].plot(history['x_pred_r2_keras'], 'r--', label='x_class train R2')
+    axs[1].plot(history['val_x_pred_r2_keras'], 'r', label='x_class valid R2')
+    axs[1].plot(history['y_pred_r2_keras'], 'g--', label='y_class train R2')
+    axs[1].plot(history['val_y_pred_r2_keras'], 'g', label='y_class valid R2')
+    axs[1].plot(history['yaw_pred_r2_keras'], 'b--', label='z_class train R2')
+    axs[1].plot(history['val_yaw_pred_r2_keras'], 'b', label='z_class valid R2')
+    axs[1].plot(history['z_pred_r2_keras'], 'y--', label='w_class train R2')
+    axs[1].plot(history['val_z_pred_r2_keras'], 'y', label='w_class valid R2')
+    axs[1].legend(loc='lower right')
+    axs[1].set_xlabel('Epoch')
+    axs[1].set_ylabel('R2')
+    r2_train = np.mean([history['x_pred_r2_keras'][-1], history['y_pred_r2_keras'][-1], history['yaw_pred_r2_keras'][-1], history['z_pred_r2_keras'][-1]])
+    r2_valid = np.mean([history['val_x_pred_r2_keras'][-1], history['val_y_pred_r2_keras'][-1], history['val_yaw_pred_r2_keras'][-1], history['val_z_pred_r2_keras'][-1]])
+    axs[1].set_title('R2 (train {:.2f}, val {:.2f})'.format(r2_train, r2_valid))
+    print('Train R2 [x,y,z,w]: \t', [history['x_pred_r2_keras'][-1], history['y_pred_r2_keras'][-1], history['yaw_pred_r2_keras'][-1], history['z_pred_r2_keras'][-1]])
+    print('Valid R2 [x,y,z,w]: \t', [history['val_x_pred_r2_keras'][-1], history['val_y_pred_r2_keras'][-1], history['val_yaw_pred_r2_keras'][-1], history['val_z_pred_r2_keras'][-1]])
 
   # - Accuracy
   
   if classification:
-    ax2.plot(history.history['x_class_accuracy'], 'r--', label='x_class train Accuracy')
-    ax2.plot(history.history['val_x_class_accuracy'], 'r', label='x_class valid Accuracy')
-    ax2.plot(history.history['y_class_accuracy'], 'g--', label='y_class train Accuracy')
-    ax2.plot(history.history['val_y_class_accuracy'], 'g', label='y_class valid Accuracy')
-    ax2.plot(history.history['z_class_accuracy'], 'b--', label='z_class train Accuracy')
-    ax2.plot(history.history['val_z_class_accuracy'], 'b', label='z_class valid Accuracy')
-    ax2.plot(history.history['w_class_accuracy'], 'y--', label='w_class train Accuracy')
-    ax2.plot(history.history['val_w_class_accuracy'], 'y', label='w_class valid Accuracy')
-    ax2.legend(loc='lower right')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Accuracy')
-    ax2.set_title(var_str + ' training and validation Accuracy')
+    xs[-1].plot(history['x_class_accuracy'], 'r--', label='x_class train Accuracy')
+    xs[-1].plot(history['val_x_class_accuracy'], 'r', label='x_class valid Accuracy')
+    xs[-1].plot(history['y_class_accuracy'], 'g--', label='y_class train Accuracy')
+    xs[-1].plot(history['val_y_class_accuracy'], 'g', label='y_class valid Accuracy')
+    xs[-1].plot(history['z_class_accuracy'], 'b--', label='z_class train Accuracy')
+    xs[-1].plot(history['val_z_class_accuracy'], 'b', label='z_class valid Accuracy')
+    xs[-1].plot(history['w_class_accuracy'], 'y--', label='w_class train Accuracy')
+    xs[-1].plot(history['val_w_class_accuracy'], 'y', label='w_class valid Accuracy')
+    xs[-1].legend(loc='lower right')
+    xs[-1].set_xlabel('Epoch')
+    xs[-1].set_ylabel('Accuracy')
+    xs[-1].set_title('Accuracy')
  
   if save:
     general_utils.create_folder_if_not_exist(save_folder)

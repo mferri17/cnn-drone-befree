@@ -5,6 +5,7 @@ C:/Users/96mar/Desktop/meeting_dario/data/orig_train_63720/ ^
 --data_len 8192 ^
 --batch_size 64 ^
 --epochs 5 ^
+--oversampling 3 ^
 --weights_path ./../../dev-models/_originals/v1_original_weights.pickle ^
 --retrain_from 0 ^
 --verbose 2 ^
