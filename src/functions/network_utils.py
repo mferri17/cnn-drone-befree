@@ -310,22 +310,26 @@ def map_preprocessing(img, gt, aug_prob):
 
 def tf_augmentation(img, aug_prob):
   augmenter = A.Compose([
-        A.RandomBrightnessContrast(brightness_by_max=True, p=0.9), # 0.77 sec
-        A.Solarize(threshold=225, p=0.2), # 0.81 sec
-        A.Equalize(by_channels=True, p=0.1), # 0.97 sec
+        A.RandomBrightnessContrast(brightness_by_max=True, p=0.75), # 0.77 sec
+        A.RandomGamma(p=0.5), # 0.50 sec
+        A.CLAHE(p=0.05), # 3.50 sec
+        A.Solarize(threshold=(200,250), p=0.2), # 0.81 sec
         A.OneOf([
-            A.ChannelDropout(fill_value=96, p=0.2), # 0.52 sec
-            A.ChannelShuffle(p=0.8), # 0.44 sec
-        ], p=0.3),
-        A.MultiplicativeNoise(multiplier=(0.85, 1.15), per_channel=True, elementwise=True, p=0.3), # 6.89 sec
-        A.CoarseDropout(min_holes=20, max_holes=70, min_height=1, max_height=4, min_width=1, max_width=4, p=0.3), # 3.78 sec
-        A.OneOf([
-            A.ToGray(p=0.5), # 0.34 sec
-            A.InvertImg(p=0.5), # 0.36 sec
+            A.Equalize(by_channels=False, p=0.5), # 0.97 sec
+            A.Equalize(by_channels=True, p=0.5), # 0.97 sec
         ], p=0.1),
+        A.RGBShift(p=0.3), # 1.53 sec
         A.OneOf([
-            A.Blur(blur_limit=3, p=0.5), # 0.58 sec
-            A.MotionBlur(blur_limit=4, p=0.5), # 0.97 sec
+            A.ChannelDropout(fill_value=128, p=0.2), # 0.52 sec
+            A.ChannelShuffle(p=0.8), # 0.44 sec TODO only apply to the background
+        ], p=0.1),
+        A.MultiplicativeNoise(multiplier=(0.85, 1.15), per_channel=True, elementwise=True, p=0.05), # 6.89 sec
+        A.CoarseDropout(min_holes=20, max_holes=70, min_height=1, max_height=4, min_width=1, max_width=4, p=0.2), # 3.78 sec
+        A.ToGray(p=0.05), # 0.34 sec
+        A.InvertImg(p=0.05), # 0.36 sec
+        A.OneOf([
+            A.Blur(blur_limit=4, p=0.5), # 0.58 sec
+            A.MotionBlur(blur_limit=6, p=0.5), # 0.97 sec
         ], p=0.05),
     ], p=aug_prob)
   img = augmenter(image=img)['image']
@@ -409,13 +413,16 @@ def network_train_generator(model, input_size, data_files,
 
     gen = tf.data.Dataset.from_tensor_slices(files)
     gen = gen.map(lambda filename: map_parse_input(filename, input_size), map_parallel, deterministic)
+
     if cache:
       gen = gen.cache()
       gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
+
     gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds), map_parallel, deterministic)
     gen = gen.map(lambda img, gt: map_preprocessing(img, gt, aug_prob), map_parallel, deterministic)
     gen = gen.batch(batch_size, drop_remainder=True)
     gen = gen.repeat(repeat)
+
     if prefetch:
       gen = gen.prefetch(tf.data.experimental.AUTOTUNE)
 
@@ -507,7 +514,7 @@ def network_stats(history, regression, classification, view, save, save_folder =
  
   if save:
     general_utils.create_folder_if_not_exist(save_folder)
-    figname = os.path.join(save_folder, '{0} - v1_{1}_metrics.png'.format(save_name, var_str))
+    figname = os.path.join(save_folder, '{0} - v1_all_var_metrics.png'.format(save_name))
     fig.savefig(figname, bbox_inches='tight')
 
   if view:

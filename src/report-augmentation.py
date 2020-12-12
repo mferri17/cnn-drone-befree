@@ -229,27 +229,31 @@ def test_all(samples_basepath, samples_paths, bgs_basepath, bgs_paths, save_path
 
 ### ------------------ TEST CHOSEN ------------------ ###
 
-def test_chosen(samples_basepath, samples_paths, bgs_basepath, bgs_paths, nimages=1, save=False, save_path=None):
+def test_chosen(samples_basepath, samples_paths, bgs_basepath, bgs_paths, singular_aug=True, nimages=1, save=False, save_path=None):
 
     # --- Settings
 
     augmenter = A.Compose([
-        A.RandomBrightnessContrast(brightness_by_max=True, p=0.9), # 0.77 sec
-        A.Solarize(threshold=225, p=0.2), # 0.81 sec
-        A.Equalize(by_channels=True, p=0.1), # 0.97 sec
+        A.RandomBrightnessContrast(brightness_by_max=True, p=0.75), # 0.77 sec
+        A.RandomGamma(p=0.5), # 0.50 sec
+        A.CLAHE(p=0.05), # 3.50 sec
+        A.Solarize(threshold=(200,250), p=0.2), # 0.81 sec
         A.OneOf([
-            A.ChannelDropout(fill_value=96, p=0.2), # 0.52 sec
-            A.ChannelShuffle(p=0.8), # 0.44 sec
-        ], p=0.3),
-        A.MultiplicativeNoise(multiplier=(0.85, 1.15), per_channel=True, elementwise=True, p=0.3), # 6.89 sec
-        A.CoarseDropout(min_holes=20, max_holes=70, min_height=1, max_height=4, min_width=1, max_width=4, p=0.3), # 3.78 sec
-        A.OneOf([
-            A.ToGray(p=0.5), # 0.34 sec
-            A.InvertImg(p=0.5), # 0.36 sec
+            A.Equalize(by_channels=False, p=0.5), # 0.97 sec
+            A.Equalize(by_channels=True, p=0.5), # 0.97 sec
         ], p=0.1),
+        A.RGBShift(p=0.3), # 1.53 sec
         A.OneOf([
-            A.Blur(blur_limit=3, p=0.5), # 0.58 sec
-            A.MotionBlur(blur_limit=4, p=0.5), # 0.97 sec
+            A.ChannelDropout(fill_value=128, p=0.2), # 0.52 sec
+            A.ChannelShuffle(p=0.8), # 0.44 sec TODO only apply to the background
+        ], p=0.1),
+        A.MultiplicativeNoise(multiplier=(0.85, 1.15), per_channel=True, elementwise=True, p=0.05), # 6.89 sec
+        A.CoarseDropout(min_holes=20, max_holes=70, min_height=1, max_height=4, min_width=1, max_width=4, p=0.2), # 3.78 sec
+        A.ToGray(p=0.05), # 0.34 sec
+        A.InvertImg(p=0.05), # 0.36 sec
+        A.OneOf([
+            A.Blur(blur_limit=4, p=0.5), # 0.58 sec
+            A.MotionBlur(blur_limit=6, p=0.5), # 0.97 sec
         ], p=0.05),
     ], p=1)
 
@@ -259,9 +263,9 @@ def test_chosen(samples_basepath, samples_paths, bgs_basepath, bgs_paths, nimage
     probabilities = np.array([t[1].p for t in enumerate(augmenter.transforms)])
     print()
     print('Probabilities:', probabilities)
-    print('Probability of having a fully augmented image: {:f} %'.format(np.prod(probabilities) * 100))
-    print('Probability of having a hugely augmented image: {:f} %'.format(np.prod(probabilities[(probabilities > 0.1) & (probabilities < 0.9)]) * 100))
-    print('Probability of having a totally clean image: {:f} %'.format(np.prod(1-probabilities) * 100))
+    print('Probability of having a fully augmented image: \t {:f} %'.format(np.prod(probabilities) * 100))
+    # print('Probability of having a hugely augmented image: \t {:f} %'.format(np.prod(probabilities[(probabilities >= 0.1) & (probabilities <= 0.8)]) * 100))
+    print('Probability of having a totally clean image: \t {:f} %'.format(np.prod(1-probabilities) * 100))
 
     # -- Performance evaluation
     
@@ -278,43 +282,72 @@ def test_chosen(samples_basepath, samples_paths, bgs_basepath, bgs_paths, nimage
     # --- Example
 
     if save_path is not None:
-        save_path = general_utils.create_datetime_folder(save_path, 'test chosen')
+        save_path = general_utils.create_datetime_folder(save_path, 'test chosen {}'.format('singular_aug' if singular_aug else 'multiple_aug'))
 
-    ncols = 2
-    nrows = 2
+    if singular_aug:
+        # images are shown (normal and replaced in the same chart), before and after a singular augmentation
+        ncols = 2
+        nrows = 2
+        for i in range(nimages):
+            img, replaced = get_random_img(samples_basepath, samples_paths, bgs_basepath, bgs_paths)
 
-    for i in range(nimages):
-        img, replaced = get_random_img(samples_basepath, samples_paths, bgs_basepath, bgs_paths)
+            fig, ax = plt.subplots(nrows, ncols, figsize=(ncols*5,nrows*3), subplot_kw={'xticks': [], 'yticks': []})
+            fig.tight_layout()
 
-        fig, ax = plt.subplots(nrows, ncols, figsize=(ncols*5,nrows*3), subplot_kw={'xticks': [], 'yticks': []})
-        fig.tight_layout()
+            ax[0,0].imshow(img)
+            ax[0,1].imshow(augmenter(image=img)['image'])
+            ax[1,0].imshow(replaced)
+            ax[1,1].imshow(augmenter(image=replaced)['image'])
 
-        ax[0,0].imshow(img)
-        ax[0,1].imshow(augmenter(image=img)['image'])
-        ax[1,0].imshow(replaced)
-        ax[1,1].imshow(augmenter(image=replaced)['image'])
+            if save_path is not None:
+                plt.savefig(os.path.join(save_path, 'image-{:04}.jpg'.format(i)))
+            else:
+                plt.show()
 
-        if save_path is not None:
-            plt.savefig(os.path.join(save_path, 'image-{:04}.jpg'.format(i)))
-        else:
-            plt.show()
+            plt.close()
+    else:
+        # images are shown (normal and replaced on different charts), before and after multiple augmentations
 
-        plt.close()
+        def show_multiple_augmentations(orig_image, naugs, cols_max, save_name='image'):
+            ncols = cols_max if naugs > cols_max else naugs
+            nrows = int(np.ceil(naugs / ncols))
+            fig, ax = plt.subplots(nrows, ncols, figsize=(int(ncols*1.5),nrows), subplot_kw={'xticks': [], 'yticks': []})
+            fig.tight_layout()
+            
+            cell = general_utils.subplots_get_cell(nimages, nrows, ncols, 0, ax)
+            cell.imshow(orig_image)
+
+            for i in range(1, naugs):
+                cell = general_utils.subplots_get_cell(naugs, nrows, ncols, i, ax)
+                cell.imshow(augmenter(image=orig_image)['image'])
+
+            if save_path is not None:
+                plt.savefig(os.path.join(save_path, '{}.jpg'.format(save_name)))
+            else:
+                plt.show()
+
+            plt.close()
+        
+        for num in range(nimages):
+            img, replaced = get_random_img(samples_basepath, samples_paths, bgs_basepath, bgs_paths)
+            show_multiple_augmentations(img, naugs=56, cols_max=8, save_name='image-{:04}-original'.format(num))
+            show_multiple_augmentations(replaced, naugs=56, cols_max=8, save_name='image-{:04}-replaced'.format(num))
+
     
-
 
 ### ---------------------- MAIN --------------------- ###
 
 if __name__ == "__main__":
 
     sp = 'C:/Users/96mar/Desktop/meeting_dario/data/orig_train_63720/'
-    sam_paths = os.listdir(sp)
     bp = 'C:/Users/96mar/Desktop/meeting_dario/data/indoorCVPR_09_PPDario_uint8'
-    bg_paths = list(map(str, Path(bp).rglob('*.pickle')))
     save_path = 'C:/Users/96mar/Desktop/meeting_dario/report-augmentations/'
+    
+    sam_paths = os.listdir(sp)
+    bg_paths = list(map(str, Path(bp).rglob('*.pickle')))
 
     # test_all(sp, sam_paths, bp, bg_paths, save_path=save_path)
-    test_chosen(sp, sam_paths, bp, bg_paths, nimages=1, save_path=None)
+    test_chosen(sp, sam_paths, bp, bg_paths, singular_aug=False, nimages=10, save_path=save_path)
 
 
 
