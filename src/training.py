@@ -123,13 +123,14 @@ def train_with_generator(data_folder, network_weights_path, data_len,
       use_profiler=use_profiler, profiler_dir=profile_dir
     )
 
-    network_utils.network_stats(
-      history, regression, classification, 
-      view_stats, save_stats, save_folder, model_name
-    )
+    if view_stats or save_stats:
+      network_utils.network_stats(
+        history.history, regression, classification, 
+        view_stats, save_stats, save_folder, model_name
+      )
 
     if save_model:
-        network_utils.network_save(model, save_folder, model_name)
+        network_utils.network_save(save_folder, model_name, model, history.history)
 
 
 
@@ -179,6 +180,7 @@ def get_args():
   parser.add_argument('--bgs_name', type=str, default=None, metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
   # parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform standard image augmentation')
   parser.add_argument('--aug_prob', type=float, default=0, metavar='AP', help='probability of performing image augmentation on each sample')
+  parser.add_argument('--view_stats', action='store_true', help='specify the argument if you want to visualize model metrics')
   parser.add_argument('--save', action='store_true', help='specify the argument if you want to save the model and metrics')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save the model and metrics')
   parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
@@ -230,5 +232,5 @@ if __name__ == "__main__":
     args.retrain_from, args.verbose, args.batch_size, args.epochs, args.oversampling,
     args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
     args.bgs_folder, args.bgs_len, args.bgs_name, args.aug_prob,
-    view_stats=False, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
+    args.view_stats, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )
