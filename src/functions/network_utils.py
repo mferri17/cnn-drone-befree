@@ -35,6 +35,8 @@ from tensorflow.keras.utils import plot_model, to_categorical
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
+import tensorflow_probability as tfp
+
 # # -- for GradCAM
 # from tf_keras_vis.utils import normalize
 # from tf_keras_vis.gradcam import Gradcam, GradcamPlusPlus
@@ -145,9 +147,9 @@ def network_create(input_size, regression, classification, initial_weights = Non
         # for each variable, the respective model only contains the associated variable (so the other outputs will be missing)
         print(layer_name, 'layer not found, skipping')
         continue
-    print('Restored network initial weights')
+    print('Restored network initial weights.\n')
   else:
-    print('Network initialized with random weights')
+    print('Network initialized with random weights.\n')
 
   # --- Set trainable layers
 
@@ -268,8 +270,8 @@ def map_parse_input(filename, img_shape):
 
   img.set_shape(img_shape)
   gt.set_shape(8)
-
   return img, mask, gt
+
 
 def tf_parse_input(filename):
   with open(filename, 'rb') as fp:
@@ -278,8 +280,11 @@ def tf_parse_input(filename):
 
 
 def map_replace_background(img, mask, gt, backgrounds):
+  img_shape = img.shape
+  
   if backgrounds.shape[0] > 0: # backgrounds shape is known at graph definition
     valid_shapes = tf.math.reduce_all(tf.math.equal(tf.shape(mask), tf.shape(img)[:-1]))
+    
     if valid_shapes: # mask shape is dynamic
       ridx = tf.random.uniform(shape=[], minval=0, maxval=len(backgrounds), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
       bg = backgrounds[ridx]
@@ -287,28 +292,52 @@ def map_replace_background(img, mask, gt, backgrounds):
       img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
     # else:
     #   tf.numpy_function(save_img, [img], [], 'save_img')
+  
+  img.set_shape(img_shape)
   return img, gt
 
 
-def map_preprocessing(img, gt, aug_prob):
+@tf.function
+def map_augmentation(img, gt, aug_prob, noises):
+  img_shape = img.shape
+
+  # -- numpy augmentations
   if aug_prob > 0:
-    img_shape = img.shape
-    img = tf.numpy_function(tf_augmentation, [img, aug_prob], tf.uint8, 'tf_augmentation')
+    img = tf.numpy_function(tf_albumentation, [img, aug_prob], tf.uint8, 'tf_albumentation') # albumentation
     img.set_shape(img_shape)
-    
-    if tf.random.uniform([]) < 0.5: # 0.5% probability of flipping horizontally
+
+  # -- cast to float
+  img = tf.cast(img, tf.float32) / 255
+  
+  # -- native tensorflow augmentations
+  if aug_prob > 0:
+
+    # horizontal flip
+    if tf.random.uniform([]) < 0.5 * aug_prob:
       img = tf.image.flip_left_right(img)
       gt = tf.convert_to_tensor([gt[0], -gt[1], gt[2], -gt[3]]) # invert Y and YAW
-      # TODO add classification
+      # TODO add classification handling for gt
 
-  # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
-  x = tf.cast((255 - img), tf.float32)
-  # TODO add classification
-  y = gt[0:4]
-  y = {'x_pred': y[0], 'y_pred': y[1], 'z_pred': y[2], 'yaw_pred': y[3]}
-  return x, y
+    # additional noise
+    if noises.shape[0] > 0: # known at graph definition
+      if tf.random.uniform([]) < 0.2 * aug_prob:
+        distr_tr = tfp.distributions.Triangular(low=0, high=0.75, peak=0.5)
+        multiplier = distr_tr.sample() # noise is probabilistically reduced
+        by_channel = tf.random.uniform([]) < 0.2 # 20% of cases are applied by channel
+        ridx = tf.random.uniform(shape=[], minval=0, maxval=len(noises), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
+        
+        noise = noises[ridx]
+        noise = tf.image.random_crop(noise, size=(img_shape if by_channel else tf.convert_to_tensor([img_shape[0], img_shape[1], 1])))
+        noise = tf.image.flip_left_right(noise)
+        noise = noise * multiplier + 1  # rescaling in (1-multiplier, 1+multiplier)
+        img = tf.math.multiply(img, noise)
+        img = tf.clip_by_value(img, clip_value_min=0, clip_value_max=1) # multiplying, we may exceed the valid range
+      
+  # -- result
+  return img, gt
 
-def tf_augmentation(img, aug_prob):
+
+def tf_albumentation(img, aug_prob):
   augmenter = A.Compose([
         A.RandomBrightnessContrast(brightness_by_max=True, p=0.75), # 0.77 sec
         A.RandomGamma(p=0.5), # 0.50 sec
@@ -336,6 +365,15 @@ def tf_augmentation(img, aug_prob):
   return img
 
 
+def map_preprocessing(img, gt):
+  # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
+  x = tf.cast((255 - img), tf.float32) # TODO remove inversion, and also cast if already present before
+  y = gt[0:4]
+  y = {'x_pred': y[0], 'y_pred': y[1], 'z_pred': y[2], 'yaw_pred': y[3]}
+  # TODO add classification handling for gt
+  return x, y
+
+
 def r2_keras(y_true, y_pred):
   # from https://www.kaggle.com/c/mercedes-benz-greener-manufacturing/discussion/34019
   SS_res =  K.sum(K.square(y_true - y_pred)) 
@@ -344,7 +382,7 @@ def r2_keras(y_true, y_pred):
 
 
 def network_train_generator(model, input_size, data_files, 
-                            regression, classification, bgs_paths, aug_prob,
+                            regression, classification, bgs_paths, aug_prob, noises_paths = [],
                             batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
@@ -389,7 +427,6 @@ def network_train_generator(model, input_size, data_files,
   if bgs_paths is not None and len(bgs_paths) > 0:  
     print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
     backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
-    backgrounds = tf.convert_to_tensor(backgrounds) # saves time during runtime
     
     if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
       backgrounds = (backgrounds * 255).astype('uint8')
@@ -399,6 +436,16 @@ def network_train_generator(model, input_size, data_files,
       print('Backgrounds converted from unknown dtype to uint8')
 
     print('Loaded {} backgrounds of shape {}.\n'.format(len(backgrounds), backgrounds.shape[1:]))
+  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
+
+  # --- Augmentation advanced management
+
+  noises = np.array([])
+  if noises_paths is not None and len(noises_paths) > 0:  
+    print('Loading {} noises in memory for data augmentation...'.format(len(noises_paths)))
+    noises = np.array(list([general_utils.load_pickle(filepath) for filepath in noises_paths]))
+    print('Loaded {} noises of shape {}.\n'.format(len(noises), noises.shape[1:]))
+  noises = tf.convert_to_tensor(noises) # saves time during training
 
   # --- Train/Validation split
     
@@ -419,13 +466,14 @@ def network_train_generator(model, input_size, data_files,
       gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
 
     gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds), map_parallel, deterministic)
-    gen = gen.map(lambda img, gt: map_preprocessing(img, gt, aug_prob), map_parallel, deterministic)
+    gen = gen.map(lambda img, gt: map_augmentation(img, gt, aug_prob, noises), map_parallel, deterministic)
+    gen = gen.map(lambda img, gt: map_preprocessing(img, gt), map_parallel, deterministic)
     gen = gen.batch(batch_size, drop_remainder=True)
     gen = gen.repeat(repeat)
 
     if prefetch:
       gen = gen.prefetch(tf.data.experimental.AUTOTUNE)
-
+    
     return gen
 
 

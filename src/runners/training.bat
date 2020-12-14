@@ -10,10 +10,11 @@ C:/Users/96mar/Desktop/meeting_dario/data/orig_train_63720/ ^
 --retrain_from 0 ^
 --verbose 2 ^
 --lr_reducer ^
+--profiler ^
 --profiler_dir C:\Temp\venv\logs\tfdata-paug ^
 --bgs_folder C:/Users/96mar/Desktop/meeting_dario/data/indoorCVPR_09_PPDario_uint8 ^
 --bgs_len 1000 ^
 --bgs_name indoorCVPR_PPDario ^
 --aug_prob 0.95 ^
+--noise_folder C:/Users/96mar/Desktop/meeting_dario/data/perlin-noise ^
 --save_folder ./../../dev-models/training_tfdata ^
---debug

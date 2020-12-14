@@ -71,7 +71,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
                          use_lr_reducer, use_early_stop, 
                          use_profiler, profile_dir,
                          backgrounds_folder, backgrounds_len, backgrounds_name,
-                         augmentation_prob,
+                         augmentation_prob, noise_folder,
                          view_stats, save_stats, save_model, save_folder):
     
     list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
@@ -90,6 +90,10 @@ def train_with_generator(data_folder, network_weights_path, data_len,
         np.random.seed(1) # TODO remove seed
         np.random.shuffle(replace_imgs_paths) # shuffling before reducing backgrounds
         replace_imgs_paths = replace_imgs_paths[:backgrounds_len] # reducing backgrounds cardinality
+
+    noises_paths = []
+    if noise_folder is not None:
+      noises_paths = general_utils.list_files_in_folder(noise_folder, 'pickle', recursive=False)
 
     timestr = time.strftime("%Y%m%d_%H%M%S")
     model_name = '{0} {1} - {2}{3}_len{4}_b{5}_{6}w_{7}{8}{9}_ep{10}'.format(
@@ -117,7 +121,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
     model, history = network_utils.network_train_generator(
       model, input_shape, list_files, 
       regression, classification, 
-      replace_imgs_paths, augmentation_prob,
+      replace_imgs_paths, augmentation_prob, noises_paths,
       batch_size, epochs, oversampling, verbose, 
       use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
       use_profiler=use_profiler, profiler_dir=profile_dir
@@ -180,6 +184,7 @@ def get_args():
   parser.add_argument('--bgs_name', type=str, default=None, metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
   # parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform standard image augmentation')
   parser.add_argument('--aug_prob', type=float, default=0, metavar='AP', help='probability of performing image augmentation on each sample')
+  parser.add_argument('--noise_folder', type=dir_path, metavar='NF', help='path to noises for image augmentation (default = no noise augmentation)')
   parser.add_argument('--view_stats', action='store_true', help='specify the argument if you want to visualize model metrics')
   parser.add_argument('--save', action='store_true', help='specify the argument if you want to save the model and metrics')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save the model and metrics')
@@ -231,6 +236,6 @@ if __name__ == "__main__":
     args.data_folder, args.weights_path, args.data_len, args.regression, args.classification,
     args.retrain_from, args.verbose, args.batch_size, args.epochs, args.oversampling,
     args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
-    args.bgs_folder, args.bgs_len, args.bgs_name, args.aug_prob,
+    args.bgs_folder, args.bgs_len, args.bgs_name, args.aug_prob, args.noise_folder,
     args.view_stats, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )
