@@ -36,6 +36,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 
 # # -- for GradCAM
 # from tf_keras_vis.utils import normalize
@@ -279,7 +280,7 @@ def tf_parse_input(filename):
   return sample['image'].astype('uint8'), sample['mask'].astype('uint8'), sample['gt'].astype('float64')
 
 
-def map_replace_background(img, mask, gt, backgrounds):
+def map_replace_background(img, mask, gt, backgrounds, smooth_mask):
   img_shape = img.shape
   
   if backgrounds.shape[0] > 0: # backgrounds shape is known at graph definition
@@ -288,8 +289,19 @@ def map_replace_background(img, mask, gt, backgrounds):
     if valid_shapes: # mask shape is dynamic
       ridx = tf.random.uniform(shape=[], minval=0, maxval=len(backgrounds), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
       bg = backgrounds[ridx]
-      mask_stack = mask[:,:,np.newaxis] # Add 3rd dimension for broadcasting
-      img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
+
+      if smooth_mask:
+        # img, mask and bg must be float
+        mask = tfa.image.gaussian_filter2d(tf.cast(mask, tf.float32))
+        mask_stack = mask[:,:,np.newaxis] # Add 3rd dimension for broadcasting
+        img = tf.cast(img, tf.float32) # recasting for noise blending
+        img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
+        img = tf.cast(img, tf.uint8) # recasting back
+      else:
+        # img, mask and bg can be uint8
+        mask_stack = mask[:,:,np.newaxis] # Add 3rd dimension for broadcasting
+        img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
+    
     # else:
     #   tf.numpy_function(save_img, [img], [], 'save_img')
   
@@ -386,7 +398,7 @@ def r2_keras(y_true, y_pred):
 
 
 def network_train_generator(model, input_size, data_files, 
-                            regression, classification, bgs_paths, aug_prob, noises_paths = [],
+                            regression, classification, bgs_paths, bg_smoothmask, aug_prob, noises_paths = [],
                             batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
@@ -432,12 +444,16 @@ def network_train_generator(model, input_size, data_files,
     print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
     backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
     
-    if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
-      backgrounds = (backgrounds * 255).astype('uint8')
-      print('Backgrounds converted from float to uint8')
-    elif backgrounds.dtype != np.uint8:
-      backgrounds = backgrounds.astype('uint8')
-      print('Backgrounds converted from unknown dtype to uint8')
+    if bg_smoothmask: # need float32 background
+      if issubclass(backgrounds.dtype.type, np.integer):
+        backgrounds = backgrounds.astype('float32') # it's ok to have 0-255 float since input images for the network are like so
+    else: # need uint8 background
+      if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
+        backgrounds = (backgrounds * 255).astype('uint8')
+        print('Backgrounds converted from float to uint8')
+      elif backgrounds.dtype != np.uint8:
+        backgrounds = backgrounds.astype('uint8')
+        print('Backgrounds converted from unknown dtype to uint8')
 
     print('Loaded {} backgrounds of shape {}.\n'.format(len(backgrounds), backgrounds.shape[1:]))
   backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
@@ -469,7 +485,7 @@ def network_train_generator(model, input_size, data_files,
       gen = gen.cache()
       gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
 
-    gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds), map_parallel, deterministic)
+    gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds, bg_smoothmask), map_parallel, deterministic)
     gen = gen.map(lambda img, gt: map_augmentation(img, gt, aug_prob, noises), map_parallel, deterministic)
     gen = gen.map(lambda img, gt: map_preprocessing(img, gt), map_parallel, deterministic)
     gen = gen.batch(batch_size, drop_remainder=True)
