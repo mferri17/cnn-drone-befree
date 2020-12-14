@@ -162,6 +162,7 @@ def get_args():
   debug_data_len = 64
   debug_batch_size = 4
   debug_epochs = 2
+  debug_oversampling = 1
 
   parser = argparse.ArgumentParser(description='Train the network on the given dataset using a generator which performs dynamic loading and data augmentation.')
   parser.add_argument('data_folder', type=dir_path, help='path to the dataset') # required
@@ -171,7 +172,7 @@ def get_args():
   parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
   parser.add_argument('--batch_size', type=int, default=default_batch_size, metavar='BS', help='training batch size (default = {}, debug = {})'.format(default_batch_size, debug_batch_size))
   parser.add_argument('--epochs', type=int, default=default_epochs, metavar='E', help='number of training epochs (default = {}, debug = {})'.format(default_epochs, debug_epochs))
-  parser.add_argument('--oversampling', type=int, default=1, metavar='OS', help='number of times the dataset has to be repeated for each epoch (default = 1)')
+  parser.add_argument('--oversampling', type=int, default=1, metavar='OS', help='number of times the dataset has to be repeated for each epoch (default = 1, debug = {})'.format(debug_oversampling))
   parser.add_argument('--weights_path', type=file_path, metavar='WP', help='path to the network initial weights dictionary {"layer_name": get_weights}') # required
   parser.add_argument('--retrain_from', type=int, default=None, metavar='RF', help='number of layer to retrain from (default = no training, 0 = complete training)')
   parser.add_argument('--verbose', type=int, default=2, metavar='VER', help='keras training verbosity (0: silent, 1: complete, 2: one line per epoch')
@@ -195,6 +196,7 @@ def get_args():
     parsed_args.data_len = debug_data_len
     parsed_args.batch_size = debug_batch_size
     parsed_args.epochs = debug_epochs
+    parsed_args.oversampling = debug_oversampling
 
   return parsed_args
 
