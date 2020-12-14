@@ -297,7 +297,6 @@ def map_replace_background(img, mask, gt, backgrounds):
   return img, gt
 
 
-@tf.function
 def map_augmentation(img, gt, aug_prob, noises):
   img_shape = img.shape
 
@@ -306,9 +305,6 @@ def map_augmentation(img, gt, aug_prob, noises):
     img = tf.numpy_function(tf_albumentation, [img, aug_prob], tf.uint8, 'tf_albumentation') # albumentation
     img.set_shape(img_shape)
 
-  # -- cast to float
-  img = tf.cast(img, tf.float32) / 255
-  
   # -- native tensorflow augmentations
   if aug_prob > 0:
 
@@ -323,15 +319,23 @@ def map_augmentation(img, gt, aug_prob, noises):
       if tf.random.uniform([]) < 0.2 * aug_prob:
         distr_tr = tfp.distributions.Triangular(low=0, high=0.75, peak=0.5)
         multiplier = distr_tr.sample() # noise is probabilistically reduced
-        by_channel = tf.random.uniform([]) < 0.2 # 20% of cases are applied by channel
-        ridx = tf.random.uniform(shape=[], minval=0, maxval=len(noises), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
+        by_channel = tf.random.uniform([]) < 0.5 # 50% of cases are applied by channel
         
+        ridx = tf.random.uniform(shape=[], minval=0, maxval=len(noises), dtype=tf.dtypes.int64, seed=1) # TODO remove seed
         noise = noises[ridx]
-        noise = tf.image.random_crop(noise, size=(img_shape if by_channel else tf.convert_to_tensor([img_shape[0], img_shape[1], 1])))
-        noise = tf.image.flip_left_right(noise)
+
+        if by_channel:
+          multiplier *= 0.8 # otherwise, the RGB noise is too strong
+          noise = tf.image.random_crop(noise, size=img_shape) # crop over the 3 channels
+        else:
+          noise = tf.image.random_crop(noise, size=[img_shape[0], img_shape[1], 1]) # crop over just 1 channel
+
+        noise = tf.image.flip_left_right(noise) # horizontal flip
         noise = noise * multiplier + 1  # rescaling in (1-multiplier, 1+multiplier)
+        img = tf.cast(img, tf.float32) # recasting for noise blending
         img = tf.math.multiply(img, noise)
-        img = tf.clip_by_value(img, clip_value_min=0, clip_value_max=1) # multiplying, we may exceed the valid range
+        img = tf.clip_by_value(img, clip_value_min=0, clip_value_max=255) # multiplying, we may exceed the valid range
+        img = tf.cast(img, tf.uint8) # recasting back
       
   # -- result
   return img, gt
