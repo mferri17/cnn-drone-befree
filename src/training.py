@@ -74,6 +74,8 @@ def train_with_generator(data_folder, network_weights_path, data_len,
                          augmentation_prob, noise_folder,
                          view_stats, save_stats, save_model, save_folder):
     
+    # --- Parameters
+
     list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
     list_files = list_files[:data_len]
 
@@ -95,23 +97,30 @@ def train_with_generator(data_folder, network_weights_path, data_len,
     if noise_folder is not None:
       noises_paths = general_utils.list_files_in_folder(noise_folder, 'pickle', recursive=False)
 
-    timestr = time.strftime("%Y%m%d_%H%M%S")
-    model_name = '{0} {1} - {2}{3}_len{4}_b{5}_{6}w_{7}{8}{9}_ep{10}'.format(
-        timestr,                                    # 0
-        socket.gethostname().replace('.','_'),      # 1
-        'regr' if regression else '',               # 2
-        'class' if classification else '',          # 3
-        len(list_files),                            # 4
-        batch_size,                                 # 5
-        'r' if initial_weights is None else 'o',    # 6
-        'trainfrom{}'.format(retrain_from) if retrain_from is not None else 'notrain',    # 7 optional
-        '_{}(len{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths)) if len(replace_imgs_paths) > 0 else '', # 8 optional
-        '_augm{}'.format(str(augmentation_prob).replace('.','')) if augmentation_prob > 0 else '', # 9 optional
-        epochs                                      # 10
-    )
-
     with open(list_files[0], 'br') as first:
         input_shape = pickle.load(first)['image'].shape
+
+    # --- Naming
+
+    backgrounds_str = '_{}(len{}{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths), ',smooth' if bg_smoothmask else '')
+    augmentation_str = '_augm{}{}'.format(str(augmentation_prob).replace('.',''), '(noise)' if len(noises_paths) > 0 else '')
+
+    timestr = time.strftime("%Y%m%d_%H%M%S")
+    model_name = '{0} {1} - {2}{3}_len{4}_b{5}_{6}w_{7}{8}{9}_ep{10}'.format(
+        timestr,                                                                          # 0
+        socket.gethostname().replace('.','_'),                                            # 1
+        'regr' if regression else '',                                                     # 2 optional
+        'class' if classification else '',                                                # 3 optional
+        len(list_files),                                                                  # 4
+        batch_size,                                                                       # 5
+        'r' if initial_weights is None else 'o',                                          # 6
+        'trainfrom{}'.format(retrain_from) if retrain_from is not None else 'notrain',    # 7
+        backgrounds_str if len(replace_imgs_paths) > 0 else '',                           # 8 optional
+        augmentation_str if augmentation_prob > 0 else '',                                # 9 optional
+        epochs                                                                            # 10
+    )
+
+    # --- Computation
 
     model = network_utils.network_create(
       input_shape, regression, classification, 
