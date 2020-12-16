@@ -390,6 +390,30 @@ def map_preprocessing(img, gt):
   return x, y
 
 
+def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
+                   prefetch=True, parallelize=True, deterministic=False, cache=False, data_len=None, repeat=1):
+
+  map_parallel = tf.data.experimental.AUTOTUNE if parallelize else None
+
+  gen = tf.data.Dataset.from_tensor_slices(files)
+  gen = gen.map(lambda filename: map_parse_input(filename, input_size), map_parallel, deterministic)
+
+  if cache:
+    gen = gen.cache()
+    gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
+
+  gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds, bg_smoothmask), map_parallel, deterministic)
+  gen = gen.map(lambda img, gt: map_augmentation(img, gt, aug_prob, noises), map_parallel, deterministic)
+  gen = gen.map(lambda img, gt: map_preprocessing(img, gt), map_parallel, deterministic)
+  gen = gen.batch(batch_size, drop_remainder=True)
+  gen = gen.repeat(repeat)
+
+  if prefetch:
+    gen = gen.prefetch(tf.data.experimental.AUTOTUNE)
+  
+  return gen
+    
+
 def r2_keras(y_true, y_pred):
   # from https://www.kaggle.com/c/mercedes-benz-greener-manufacturing/discussion/34019
   SS_res =  K.sum(K.square(y_true - y_pred)) 
@@ -475,30 +499,11 @@ def network_train_generator(model, input_size, data_files,
 
   # --- Generator
 
-  def make_generator(files, prefetch=True, parallelize=True, deterministic=False, cache=False, data_len=None, repeat=1):
-    map_parallel = tf.data.experimental.AUTOTUNE if parallelize else None
-
-    gen = tf.data.Dataset.from_tensor_slices(files)
-    gen = gen.map(lambda filename: map_parse_input(filename, input_size), map_parallel, deterministic)
-
-    if cache:
-      gen = gen.cache()
-      gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
-
-    gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds, bg_smoothmask), map_parallel, deterministic)
-    gen = gen.map(lambda img, gt: map_augmentation(img, gt, aug_prob, noises), map_parallel, deterministic)
-    gen = gen.map(lambda img, gt: map_preprocessing(img, gt), map_parallel, deterministic)
-    gen = gen.batch(batch_size, drop_remainder=True)
-    gen = gen.repeat(repeat)
-
-    if prefetch:
-      gen = gen.prefetch(tf.data.experimental.AUTOTUNE)
-    
-    return gen
-
-
-  generator_train = make_generator(data_files_train, cache=True, data_len=len(data_files_train), repeat=oversampling)
-  generator_valid = make_generator(data_files_valid, cache=True, data_len=len(data_files_valid))
+  generator_train = tfdata_generator(data_files_train, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
+                                     cache=True, data_len=len(data_files_train), repeat=oversampling)
+                                     
+  generator_valid = tfdata_generator(data_files_valid, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
+                                     cache=True, data_len=len(data_files_valid), repeat=1)
 
   # --- Training
 
