@@ -85,25 +85,16 @@ def train_with_generator(data_folder, network_weights_path, data_len,
     else:
       initial_weights = None
 
-    replace_imgs_paths = []
-    if backgrounds_folder is not None:
-      replace_imgs_paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle', recursive=True)
-      if backgrounds_len is not None:
-        np.random.seed(1) # TODO remove seed
-        np.random.shuffle(replace_imgs_paths) # shuffling before reducing backgrounds
-        replace_imgs_paths = replace_imgs_paths[:backgrounds_len] # reducing backgrounds cardinality
-
-    noises_paths = []
-    if noise_folder is not None:
-      noises_paths = general_utils.list_files_in_folder(noise_folder, 'pickle', recursive=False)
-
     with open(list_files[0], 'br') as first:
         input_shape = pickle.load(first)['image'].shape
 
+    backgrounds = network_utils.load_backgrounds(backgrounds_folder, backgrounds_len, bg_smoothmask)
+    noises = network_utils.load_noises(noise_folder)
+
     # --- Naming
 
-    backgrounds_str = '_{}(len{}{})'.format(backgrounds_name or 'bg', len(replace_imgs_paths), ',smooth' if bg_smoothmask else '')
-    augmentation_str = '_augm{}{}'.format(str(augmentation_prob).replace('.',''), '(noise)' if len(noises_paths) > 0 else '')
+    backgrounds_str = '_{}(len{}{})'.format(backgrounds_name or 'bg', len(backgrounds), ',smooth' if bg_smoothmask else '')
+    augmentation_str = '_augm{}{}'.format(str(augmentation_prob).replace('.',''), '(noise)' if len(noises) > 0 else '')
 
     timestr = time.strftime("%Y%m%d_%H%M%S")
     model_name = '{0} {1} - {2}{3}_len{4}_b{5}_{6}w_{7}{8}{9}_ep{10}'.format(
@@ -115,7 +106,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
         batch_size,                                                                       # 5
         'r' if initial_weights is None else 'o',                                          # 6
         'trainfrom{}'.format(retrain_from) if retrain_from is not None else 'notrain',    # 7
-        backgrounds_str if len(replace_imgs_paths) > 0 else '',                           # 8 optional
+        backgrounds_str if len(backgrounds) > 0 else '',                           # 8 optional
         augmentation_str if augmentation_prob > 0 else '',                                # 9 optional
         epochs                                                                            # 10
     )
@@ -130,8 +121,8 @@ def train_with_generator(data_folder, network_weights_path, data_len,
     model, history = network_utils.network_train_generator(
       model, input_shape, list_files, 
       regression, classification, 
-      replace_imgs_paths, bg_smoothmask,
-      augmentation_prob, noises_paths,
+      backgrounds, bg_smoothmask,
+      augmentation_prob, noises,
       batch_size, epochs, oversampling, verbose, 
       use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
       use_profiler=use_profiler, profiler_dir=profile_dir
@@ -175,8 +166,8 @@ def get_args():
   debug_oversampling = 1
 
   parser = argparse.ArgumentParser(description='Train the network on the given dataset using a generator which performs dynamic loading and data augmentation.')
-  parser.add_argument('data_folder', type=dir_path, help='path to the dataset') # required
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
+  parser.add_argument('data_folder', type=dir_path, help='path to the dataset') # required
   parser.add_argument('-r', '--regression', action='store_true', help='specify the argument if you want to perform regression')
   parser.add_argument('-c', '--classification', action='store_true', help='specify the argument if you want to perform classification')
   parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
@@ -220,28 +211,11 @@ if __name__ == "__main__":
   args = get_args()
   print('\nGIVEN ARGUMENTS: ', args, '\n\n')
 
+
   ## --- GPU settings
 
-  cuda_visibile_devices = os.environ.get('CUDA_VISIBLE_DEVICES')
-  if cuda_visibile_devices is not None:
-    print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
-  
-  gpus = tf.config.experimental.list_physical_devices('GPU')
+  network_utils.use_gpu_number(args.gpu_number)
 
-  if gpus:
-    try:
-      print('Selected GPU number', args.gpu_number)
-      if args.gpu_number < 0:
-        tf.config.set_visible_devices([], 'GPU')
-      else:
-        tf.config.experimental.set_visible_devices(gpus[args.gpu_number], 'GPU')
-        tf.config.experimental.set_memory_growth(gpus[args.gpu_number], True) # not immediately allocating the full memory
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs \n')
-    except RuntimeError as e:
-      print(e) # visible devices must be set at program startup
-  else:
-      print('No available GPUs \n')
 
   ## --- Training
 

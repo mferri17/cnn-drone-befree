@@ -64,6 +64,29 @@ from . import general_utils
 #################
 
 
+def use_gpu_number(number):
+  cuda_visibile_devices = os.environ.get('CUDA_VISIBLE_DEVICES')
+  if cuda_visibile_devices is not None:
+    print('CUDA_VISIBLE_DEVICES:', os.environ['CUDA_VISIBLE_DEVICES'])
+  
+  gpus = tf.config.experimental.list_physical_devices('GPU')
+
+  if gpus:
+    try:
+      print('Selected GPU number', number)
+      if number < 0:
+        tf.config.set_visible_devices([], 'GPU')
+      else:
+        tf.config.experimental.set_visible_devices(gpus[number], 'GPU')
+        tf.config.experimental.set_memory_growth(gpus[number], True) # not immediately allocating the full memory
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs \n')
+    except RuntimeError as e:
+      print(e) # visible devices must be set at program startup
+  else:
+      print('No available GPUs \n')
+
+
 ### --------------------- STRUCTURE --------------------- ###
 
 def network_create(input_size, regression, classification, initial_weights = None, retrain_from_layer = None, view_summary = True, view_plot = False):
@@ -193,7 +216,6 @@ def network_export_weights(source_model, dest_folder, dest_name):
 
 ### ------------------ SIMPLE TRAINING ------------------ ###
 
-
 def network_train(model, data_x, data_y, regression, classification, 
                   batch_size = 64, epochs = 30, verbose = 2,
                   validation_split = 0.3, validation_shuffle = True, 
@@ -255,6 +277,54 @@ def network_train(model, data_x, data_y, regression, classification,
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
 
+def load_backgrounds(backgrounds_folder, backgrounds_len=None, bg_smoothmask=False):
+
+  backgrounds = np.array([])
+
+  if backgrounds_folder is not None:
+
+    paths = general_utils.list_files_in_folder(backgrounds_folder, 'pickle', recursive=True)
+    if backgrounds_len is not None:
+      np.random.seed(1) # TODO remove seed
+      np.random.shuffle(paths) # shuffling before reducing backgrounds
+      paths = paths[:backgrounds_len] # reducing backgrounds cardinality
+  
+    if len(paths) > 0:  
+      print('Loading {} backgrounds in memory for data augmentation...'.format(len(paths)))
+      backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in paths]))
+      
+      if bg_smoothmask: # need float32 background
+        if issubclass(backgrounds.dtype.type, np.integer):
+          backgrounds = backgrounds.astype('float32') # it's ok to have 0-255 float since input images for the network are like so
+
+      else: # need uint8 background
+        if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
+          backgrounds = (backgrounds * 255).astype('uint8')
+          print('Backgrounds converted from float to uint8')
+        elif backgrounds.dtype != np.uint8:
+          backgrounds = backgrounds.astype('uint8')
+          print('Backgrounds converted from unknown dtype to uint8')
+
+      print('Loaded {} backgrounds of shape {}.\n'.format(len(backgrounds), backgrounds.shape[1:]))
+  
+  return backgrounds
+
+
+def load_noises(noise_folder):
+  
+  noises = np.array([])
+  
+  if noise_folder is not None:
+    paths = general_utils.list_files_in_folder(noise_folder, 'pickle', recursive=False)
+
+    if len(paths) > 0:  
+      print('Loading {} noises in memory for data augmentation...'.format(len(paths)))
+      noises = np.array(list([general_utils.load_pickle(filepath) for filepath in paths]))
+      print('Loaded {} noises of shape {}.\n'.format(len(noises), noises.shape[1:]))
+
+  return noises
+
+
 img_counter = 0
 def save_img(img):
   global img_counter
@@ -293,13 +363,13 @@ def map_replace_background(img, mask, gt, backgrounds, smooth_mask):
       if smooth_mask:
         # img, mask and bg must be float
         mask = tfa.image.gaussian_filter2d(tf.cast(mask, tf.float32))
-        mask_stack = mask[:,:,np.newaxis] # Add 3rd dimension for broadcasting
+        mask_stack = mask[:,:,np.newaxis] # add 3rd dimension for broadcasting
         img = tf.cast(img, tf.float32) # recasting for noise blending
         img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
         img = tf.cast(img, tf.uint8) # recasting back
       else:
         # img, mask and bg can be uint8
-        mask_stack = mask[:,:,np.newaxis] # Add 3rd dimension for broadcasting
+        mask_stack = mask[:,:,np.newaxis] # add 3rd dimension for broadcasting
         img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
     
     # else:
@@ -337,7 +407,7 @@ def map_augmentation(img, gt, aug_prob, noises):
         noise = noises[ridx]
 
         if by_channel:
-          multiplier *= 0.8 # otherwise, the RGB noise is too strong
+          multiplier *= 0.8 # reducing the RGB noise or it is too strong
           noise = tf.image.random_crop(noise, size=img_shape) # crop over the 3 channels
         else:
           noise = tf.image.random_crop(noise, size=[img_shape[0], img_shape[1], 1]) # crop over just 1 channel
@@ -391,7 +461,7 @@ def map_preprocessing(img, gt):
 
 
 def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
-                   prefetch=True, parallelize=True, deterministic=False, cache=False, data_len=None, repeat=1):
+                     prefetch=True, parallelize=True, deterministic=False, cache=False, repeat=1):
 
   map_parallel = tf.data.experimental.AUTOTUNE if parallelize else None
 
@@ -400,7 +470,7 @@ def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, 
 
   if cache:
     gen = gen.cache()
-    gen = gen.shuffle(data_len, reshuffle_each_iteration=True)
+    gen = gen.shuffle(len(files), reshuffle_each_iteration=True)
 
   gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds, bg_smoothmask), map_parallel, deterministic)
   gen = gen.map(lambda img, gt: map_augmentation(img, gt, aug_prob, noises), map_parallel, deterministic)
@@ -422,7 +492,7 @@ def r2_keras(y_true, y_pred):
 
 
 def network_train_generator(model, input_size, data_files, 
-                            regression, classification, bgs_paths, bg_smoothmask, aug_prob, noises_paths = [],
+                            regression, classification, backgrounds, bg_smoothmask, aug_prob, noises = [],
                             batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
                             use_lr_reducer = True, use_early_stop = False, 
@@ -461,49 +531,20 @@ def network_train_generator(model, input_size, data_files,
     tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,100')
     callbacks.append(tensorboard)
 
-  # --- Backgrounds management
-
-  backgrounds = np.array([])
-  if bgs_paths is not None and len(bgs_paths) > 0:  
-    print('Loading {} backgrounds in memory for data augmentation...'.format(len(bgs_paths)))
-    backgrounds = np.array(list([general_utils.load_pickle(filepath) for filepath in bgs_paths]))
-    
-    if bg_smoothmask: # need float32 background
-      if issubclass(backgrounds.dtype.type, np.integer):
-        backgrounds = backgrounds.astype('float32') # it's ok to have 0-255 float since input images for the network are like so
-    else: # need uint8 background
-      if backgrounds.dtype == np.float32 or backgrounds.dtype == np.float64:
-        backgrounds = (backgrounds * 255).astype('uint8')
-        print('Backgrounds converted from float to uint8')
-      elif backgrounds.dtype != np.uint8:
-        backgrounds = backgrounds.astype('uint8')
-        print('Backgrounds converted from unknown dtype to uint8')
-
-    print('Loaded {} backgrounds of shape {}.\n'.format(len(backgrounds), backgrounds.shape[1:]))
-  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
-
-  # --- Augmentation advanced management
-
-  noises = np.array([])
-  if noises_paths is not None and len(noises_paths) > 0:  
-    print('Loading {} noises in memory for data augmentation...'.format(len(noises_paths)))
-    noises = np.array(list([general_utils.load_pickle(filepath) for filepath in noises_paths]))
-    print('Loaded {} noises of shape {}.\n'.format(len(noises), noises.shape[1:]))
-  noises = tf.convert_to_tensor(noises) # saves time during training
-
-  # --- Train/Validation split
+  # --- Data
     
   from sklearn.model_selection import train_test_split
   data_files_train, data_files_valid = train_test_split(data_files, test_size=validation_split, 
                                                         shuffle=validation_shuffle, random_state=1) # TODO remove seed
 
-  # --- Generator
+  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
+  noises = tf.convert_to_tensor(noises) # saves time during training
 
-  generator_train = tfdata_generator(data_files_train, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
-                                     cache=True, data_len=len(data_files_train), repeat=oversampling)
+  generator_train = tfdata_generator(data_files_train, input_size, batch_size,
+                                     backgrounds, bg_smoothmask, aug_prob, noises, cache=True, repeat=oversampling)
                                      
-  generator_valid = tfdata_generator(data_files_valid, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
-                                     cache=True, data_len=len(data_files_valid), repeat=1)
+  generator_valid = tfdata_generator(data_files_valid, input_size, batch_size,
+                                     backgrounds, bg_smoothmask, aug_prob, noises, cache=True, repeat=1)
 
   # --- Training
 
@@ -524,6 +565,42 @@ def network_train_generator(model, input_size, data_files,
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
 
   return model, history
+
+
+### --------------------- SAVING --------------------- ###
+
+
+def network_save(folder, name, model, history, save_plot = False):
+  '''
+    Saves the model as .h5 file, accordingly to the input parameters.
+    File name will be in the format '{name} - v1_{var_name}_model.h5'.
+
+    Parameters:
+        model (keras.engine.functional): Model to be saved
+        folder (str): Path in which the model has to be saved
+        name (str): Used for naming purposes, easy understandable identifier for the .h5 file name
+        var_index (int): Used for naming purposes, must be coherent with the `network_create` function same parameter
+        save_plot (bool): If True, also graphical representation (.png) of the model is saved together with the model itself
+
+    Returns:
+        model_path (str): Complete path of the saved .h5 file
+  '''
+  
+  general_utils.create_folder_if_not_exist(folder)
+  model_path = os.path.join(folder, '{} - v1_model'.format(name))
+
+  if save_plot:
+    plot_model(model, to_file = model_path + '.png', show_shapes = True, expand_nested = False)
+  
+  model_h5 = model_path + '.h5'
+  model.save(model_h5)
+
+  with open(model_path + '_history.pickle', 'wb') as fp:
+    pickle.dump(history, fp)
+
+  print('Model and history saved in', model_h5)
+
+  return model_h5
 
 
 ### --------------------- METRICS --------------------- ###
@@ -604,37 +681,21 @@ def network_stats(history, regression, classification, view, save, save_folder =
   print('\nModel stats computed')
 
 
-### --------------------- SAVE --------------------- ###
 
-
-def network_save(folder, name, model, history, save_plot = False):
-  '''
-    Saves the model as .h5 file, accordingly to the input parameters.
-    File name will be in the format '{name} - v1_{var_name}_model.h5'.
-
-    Parameters:
-        model (keras.engine.functional): Model to be saved
-        folder (str): Path in which the model has to be saved
-        name (str): Used for naming purposes, easy understandable identifier for the .h5 file name
-        var_index (int): Used for naming purposes, must be coherent with the `network_create` function same parameter
-        save_plot (bool): If True, also graphical representation (.png) of the model is saved together with the model itself
-
-    Returns:
-        model_path (str): Complete path of the saved .h5 file
-  '''
+def network_evaluate(model, data_files, input_size, batch_size,
+                     regression, classification, backgrounds=[], bg_smoothmask=False):
   
-  general_utils.create_folder_if_not_exist(folder)
-  model_path = os.path.join(folder, '{} - v1_model'.format(name))
+  # --- Data
 
-  if save_plot:
-    plot_model(model, to_file = model_path + '.png', show_shapes = True, expand_nested = False)
+  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
+
+  generator_test = tfdata_generator(data_files, input_size, batch_size,
+                                    backgrounds, bg_smoothmask, 
+                                    aug_prob=0, noises=[], repeat=1)
   
-  model_h5 = model_path + '.h5'
-  model.save(model_h5)
+  # --- Evaluation
 
-  with open(model_path + '_history.pickle', 'wb') as fp:
-    pickle.dump(history, fp)
-
-  print('Model and history saved in', model_h5)
-
-  return model_h5
+  evaluate_metrics = model.evaluate(generator_test, return_dict=True)
+  print(evaluate_metrics.keys())
+  print()
+  print(evaluate_metrics)
