@@ -452,6 +452,9 @@ def tf_albumentation(img, aug_prob):
 
 
 def map_preprocessing(img, gt):
+  # if tf.random.uniform([]) < 0.005:
+  #   tf.numpy_function(save_img, [img], [], 'save_img')
+  
   # for multi-output networks, https://datascience.stackexchange.com/a/63937/107722 saved my life 
   x = tf.cast((255 - img), tf.float32) # TODO remove inversion, and also cast if already present before
   y = gt[0:4]
@@ -491,14 +494,7 @@ def r2_keras(y_true, y_pred):
   return (1 - SS_res/(SS_tot + K.epsilon()))
 
 
-def network_train_generator(model, input_size, data_files, 
-                            regression, classification, backgrounds, bg_smoothmask, aug_prob, noises = [],
-                            batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
-                            validation_split = 0.3, validation_shuffle = True,
-                            use_lr_reducer = True, use_early_stop = False, 
-                            use_profiler = False, profiler_dir = '.\\logs', time_train = True):
-
-  # --- Compilation
+def network_compile(model, regression, classification):
 
   loss = []
   metrics = []
@@ -514,6 +510,20 @@ def network_train_generator(model, input_size, data_files,
   model.compile(loss=loss,
                 metrics=metrics,
                 optimizer='adam')
+  
+  return model
+
+
+def network_train_generator(model, input_size, data_files, 
+                            regression, classification, backgrounds, bg_smoothmask, aug_prob, noises = [],
+                            batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
+                            validation_split = 0.3, validation_shuffle = True,
+                            use_lr_reducer = True, use_early_stop = False, 
+                            use_profiler = False, profiler_dir = '.\\logs', time_train = True):
+
+  # --- Compilation
+
+  model = network_compile(model, regression, classification)
 
   # --- Callbacks
 
@@ -695,7 +705,7 @@ def network_evaluate(model, data_files, input_size, batch_size,
   
   # --- Evaluation
 
-  evaluate_metrics = model.evaluate(generator_test, return_dict=True)
-  print(evaluate_metrics.keys())
-  print()
-  print(evaluate_metrics)
+  evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
+  for key in sorted(evaluate_metrics.keys()):
+    key_name = key.replace('_keras', '') if key != 'loss' else 'test_loss'
+    print('{}: \t {:.3f}'.format(key_name, evaluate_metrics[key]))

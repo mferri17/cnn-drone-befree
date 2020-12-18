@@ -65,34 +65,52 @@ from functions import network_utils
 ### FUNCTIONS
 ######
 
-from sklearn.metrics import r2_score, mean_squared_error
-
-
-def test_models_datasets(model_paths, data_folders, batch_size,
-          bgs_folders, bgs_names, bg_smoothmask):
+def test_models_datasets(model_paths, data_folders, batch_size, bgs_folders, bg_smoothmask, save, save_folder):
 
   # model_paths = [arena, replaced, replaced_augmented, replaced_augmented_noise, replaced_augmented_noise_smooth]
   # data_folders = [arena, test, test_green]
   # bgs_paths = [bg20, room11, room15, indoorCVPRtest]
 
-  for mp in model_paths:
-    print('\n\n------------------------------------------------------------------------------------------------\n')
-    print(mp)
-    model = tf.keras.models.load_model(mp)
-    print('Model imported from', mp, '\n\n')
-    continue
+  regression = True
+  classification = False
 
-    for dp in data_folders:
-      list_files = [os.path.join(dp, fn) for fn in os.listdir(dp)]
-      input_shape = general_utils.load_pickle(list_files[0])['image'].shape
+  bgs_folders.insert(0, None) # so that we can also consider the dataset without any background replacement
+  dependencies = { 'r2_keras': network_utils.r2_keras } # see https://stackoverflow.com/a/55652105/10866825
 
+  if save:
+    original_stdout = sys.stdout # Save a reference to the original standard output
+    timestr = time.strftime("%Y%m%d_%H%M%S")
+    save_name = '{} evaluation.txt'.format(timestr)
+    save_path = os.path.join(save_folder, save_name)
+    output_file = open(save_path, 'w')
+    print('Printing on', save_path)
+    sys.stdout = output_file # Change the standard output to the file we created.
+  
+  for dp in data_folders:
+    list_files = [os.path.join(dp, fn) for fn in os.listdir(dp)]
+    input_shape = general_utils.load_pickle(list_files[0])['image'].shape
+
+    print('\n\n-------------------------------------------------------------------------------------------------------------------\n')
+    print('Evaluation on DATASET from', dp)
+    
+    model = network_utils.network_create(input_shape, regression, classification, retrain_from_layer=0, view_summary=False)
+    model = network_utils.network_compile(model, regression, classification)
+    
+    for mp in model_paths:
+      # model = tf.keras.models.load_model(mp, custom_objects=dependencies)
+      model.load_weights(mp, by_name=True)
+      print('\n--------------------- MODEL imported from', mp)
+      
       for bp in bgs_folders:
+        print('\n----- BACKGROUND replacement with', bp, '\n')
         bgs = network_utils.load_backgrounds(bp, bg_smoothmask=bg_smoothmask)
 
         network_utils.network_evaluate(model, list_files, input_shape, batch_size,
-                                        regression=True, classification=False,
-                                        backgrounds=bgs, bg_smoothmask=bg_smoothmask)
+                                        regression, classification, bgs, bg_smoothmask)
 
+  if save:
+    sys.stdout = original_stdout # Reset the standard output to its original value
+    output_file.close()
 
 
 ################################
@@ -123,9 +141,11 @@ def get_args():
   # parser.add_argument('-r', '--regression', action='store_true', help='specify the argument if you want to perform regression')
   # parser.add_argument('-c', '--classification', action='store_true', help='specify the argument if you want to perform classification')
   parser.add_argument('--batch_size', type=int, default=default_batch_size, metavar='BS', help='training batch size (default = {})'.format(default_batch_size))
-  parser.add_argument('--bgs_folders', nargs="+", type=dir_path, default=[None], metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
-  parser.add_argument('--bgs_names', nargs="+", type=str, default=[], metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
+  parser.add_argument('--bgs_folders', nargs="+", type=dir_path, default=[], metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
+  # parser.add_argument('--bgs_names', nargs="+", type=str, default=[], metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
   parser.add_argument('--bg_smoothmask', action='store_true', help='specify the argument if you want to smooth the mask before replacing the background')
+  parser.add_argument('--save', action='store_true', help='specify the argument if you want to save evaluation metrics')
+  parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save evaluation metrics')
 
   parsed_args = parser.parse_args()
   return parsed_args
@@ -143,10 +163,10 @@ if __name__ == "__main__":
 
   network_utils.use_gpu_number(args.gpu_number)
 
-  
   ## --- Testing
 
   test_models_datasets(
     args.model_paths, args.data_folders, args.batch_size, 
-    args.bgs_folders, args.bgs_names, args.bg_smoothmask,
+    args.bgs_folders, args.bg_smoothmask,
+    args.save, args.save_folder,
   )
