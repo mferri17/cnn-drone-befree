@@ -14,7 +14,7 @@ CUDA_VISIBLE_DEVICES=0 python3 ./training.py 0 \
 --lr_reducer \
 --bgs_folder /project/backgrounds/indoorCVPR_09_PPDario_uint8 \
 --bgs_name bgCVPRindoor \
---bg_smoothmask ^
+--bg_smoothmask \
 --aug_prob 0.95 \
 --noise_folder /project/perlin-noise \
 --save \

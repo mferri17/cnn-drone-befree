@@ -134,7 +134,7 @@ def get_args():
 
   default_batch_size = 64
 
-  parser = argparse.ArgumentParser(description='Train the network on the given dataset using a generator which performs dynamic loading and data augmentation.')
+  parser = argparse.ArgumentParser(description='Test given models on given test sets using given backgrounds for replacement.')
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
   parser.add_argument("--model_paths", nargs="+", type=file_path, default=[])
   parser.add_argument("--data_folders", nargs="+", type=dir_path, default=[])

@@ -662,12 +662,13 @@ def network_save(folder, name, model, history, save_plot = False):
 ### --------------------- METRICS --------------------- ###
 
 
-def network_stats(history, regression, classification, view, save, save_folder = '', save_name = ''):
+def network_stats(history, regression, classification, view, save, save_folder = '', save_name = '',
+                  dpi=300, save_pdf = False, scale_loss = None, scale_r2 = None, scale_acc = None):
 
   if regression and classification:
-    fig, axs = plt.subplots(1, 3, figsize=(18,5))
+    fig, axs = plt.subplots(1, 3, figsize=(24,5))
   else:
-    fig, axs = plt.subplots(1, 2, figsize=(12,5))
+    fig, axs = plt.subplots(1, 2, figsize=(16,5))
 
   fig.suptitle(save_name)
 
@@ -677,6 +678,7 @@ def network_stats(history, regression, classification, view, save, save_folder =
   axs[0].plot(history['val_loss'], 'k', label='Valid Loss')
   axs[0].legend(loc='upper right')
   axs[0].set_xlabel('Epoch')
+  axs[0].set_ylim(scale_loss)
   final_train_loss = history['loss'][-1]
   final_valid_loss = history['val_loss'][-1]
   axs[0].set_title('Loss (train {:.2f}, val {:.2f})'.format(final_train_loss, final_valid_loss))
@@ -698,6 +700,7 @@ def network_stats(history, regression, classification, view, save, save_folder =
     axs[1].legend(loc='lower right')
     axs[1].set_xlabel('Epoch')
     axs[1].set_ylabel('R2')
+    axs[1].set_ylim(scale_r2)
     finals_train_r2 = [history['x_pred_r2_keras'][-1], history['y_pred_r2_keras'][-1], history['yaw_pred_r2_keras'][-1], history['z_pred_r2_keras'][-1]]
     finals_valid_r2 = [history['val_x_pred_r2_keras'][-1], history['val_y_pred_r2_keras'][-1], history['val_yaw_pred_r2_keras'][-1], history['val_z_pred_r2_keras'][-1]]
     axs[1].set_title('R2 (train {:.2f}, val {:.2f})'.format(np.mean(finals_train_r2), np.mean(finals_valid_r2)))
@@ -707,18 +710,18 @@ def network_stats(history, regression, classification, view, save, save_folder =
   # - Accuracy
   
   if classification:
-    xs[-1].plot(history['x_class_accuracy'], 'r--', label='x_class train Accuracy')
-    xs[-1].plot(history['val_x_class_accuracy'], 'r', label='x_class valid Accuracy')
-    xs[-1].plot(history['y_class_accuracy'], 'g--', label='y_class train Accuracy')
-    xs[-1].plot(history['val_y_class_accuracy'], 'g', label='y_class valid Accuracy')
-    xs[-1].plot(history['z_class_accuracy'], 'b--', label='z_class train Accuracy')
-    xs[-1].plot(history['val_z_class_accuracy'], 'b', label='z_class valid Accuracy')
-    xs[-1].plot(history['w_class_accuracy'], 'y--', label='w_class train Accuracy')
-    xs[-1].plot(history['val_w_class_accuracy'], 'y', label='w_class valid Accuracy')
-    xs[-1].legend(loc='lower right')
-    xs[-1].set_xlabel('Epoch')
-    xs[-1].set_ylabel('Accuracy')
-    xs[-1].set_title('Accuracy')
+    axs[-1].plot(history['x_class_accuracy'], 'r--', label='x_class train Accuracy')
+    axs[-1].plot(history['val_x_class_accuracy'], 'r', label='x_class valid Accuracy')
+    axs[-1].plot(history['y_class_accuracy'], 'g--', label='y_class train Accuracy')
+    axs[-1].plot(history['val_y_class_accuracy'], 'g', label='y_class valid Accuracy')
+    axs[-1].plot(history['z_class_accuracy'], 'b--', label='z_class train Accuracy')
+    axs[-1].plot(history['val_z_class_accuracy'], 'b', label='z_class valid Accuracy')
+    axs[-1].plot(history['w_class_accuracy'], 'y--', label='w_class train Accuracy')
+    axs[-1].plot(history['val_w_class_accuracy'], 'y', label='w_class valid Accuracy')
+    axs[-1].legend(loc='lower right')
+    axs[-1].set_xlabel('Epoch')
+    axs[-1].set_ylabel('Accuracy')
+    axs[-1].set_ylim(scale_acc)
     finals_train_accur = [history['x_class_accuracy'][-1], history['y_class_accuracy'][-1], history['z_class_accuracy'][-1], history['w_class_accuracy'][-1]]
     finals_valid_accur = [history['val_x_class_accuracy'][-1], history['val_y_class_accuracy'][-1], history['val_z_class_accuracy'][-1], history['val_w_class_accuracy'][-1]]
     axs[1].set_title('Accur (train {:.2f}, val {:.2f})'.format(np.mean(finals_train_accur), np.mean(finals_valid_accur)))
@@ -727,8 +730,8 @@ def network_stats(history, regression, classification, view, save, save_folder =
  
   if save:
     general_utils.create_folder_if_not_exist(save_folder)
-    figname = os.path.join(save_folder, '{0} - v1_all_var_metrics.png'.format(save_name))
-    fig.savefig(figname, bbox_inches='tight', dpi=2000) # https://stackoverflow.com/questions/39870642/matplotlib-how-to-plot-a-high-resolution-graph
+    figname = os.path.join(save_folder, '{} - v1_all_var_metrics.{}'.format(save_name, 'pdf' if save_pdf else 'png'))
+    fig.savefig(figname, bbox_inches='tight', dpi=dpi) # https://stackoverflow.com/questions/39870642/matplotlib-how-to-plot-a-high-resolution-graph
 
   if view:
     plt.show()
