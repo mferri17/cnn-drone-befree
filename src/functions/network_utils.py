@@ -277,7 +277,7 @@ def network_train(model, data_x, data_y, regression, classification,
 ### ------------------ GENERATOR TRAINING ------------------ ###
 
 
-def load_backgrounds(backgrounds_folder, backgrounds_len=None, bg_smoothmask=False):
+def load_backgrounds(backgrounds_folder, bg_smoothmask=False, backgrounds_len=None):
 
   backgrounds = np.array([])
 
@@ -563,6 +563,8 @@ def network_train_generator(model, input_size, data_files,
   if time_train:
     start_time = time.monotonic()
 
+  np.set_printoptions(suppress=True)
+
   history = model.fit(
       x = generator_train,
       validation_data = generator_valid,
@@ -573,6 +575,50 @@ def network_train_generator(model, input_size, data_files,
 
   if time_train:
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
+
+  # --- Evaluation
+  
+  if True:
+
+    original_stdout = sys.stdout # Save a reference to the original standard output
+    timestr = time.strftime("%Y%m%d_%H%M%S")
+    save_name = '{} evaluation after training.txt'.format(timestr)
+    # save_path = os.path.join("./../../dev-models/training_tfdata/", save_name)
+    save_path = os.path.join("/project/save/", save_name)
+    output_file = open(save_path, 'w')
+    print('Printing on', save_path)
+    sys.stdout = output_file # Change the standard output to the file we created.
+
+    print('\nEvaluation started...')
+    
+    print('\n----- on validation set as-is (should provide same results as validation during training)')
+
+    evaluate_metrics = model.evaluate(generator_valid, verbose=0, return_dict=True)
+    print(evaluate_metrics)
+    for key in sorted(evaluate_metrics.keys()):
+      key_name = key.replace('_keras', '') if key != 'loss' else 'test_loss'
+      print('{}: \t {:.3f}'.format(key_name, evaluate_metrics[key]))
+
+    print('\n----- on validation set with network_evaluate on original images')
+
+    network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification)
+
+    print('\n----- on validation set with network_evaluate on indoor1 background')
+
+    # bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
+    bgs_valid = load_backgrounds('/project/backgrounds/indoor1/', bg_smoothmask)
+    network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
+
+    print('\n----- on validation set with network_evaluate on indoor2 background')
+
+    # bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
+    bgs_valid = load_backgrounds('/project/backgrounds/indoor2/', bg_smoothmask)
+    network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
+    
+    print('\nEvaluation finished.')
+
+    sys.stdout = original_stdout # Reset the standard output to its original value
+    output_file.close()
 
   return model, history
 
@@ -608,7 +654,7 @@ def network_save(folder, name, model, history, save_plot = False):
   with open(model_path + '_history.pickle', 'wb') as fp:
     pickle.dump(history, fp)
 
-  print('Model and history saved in', model_h5)
+  print('\nModel and history saved in', model_h5)
 
   return model_h5
 
@@ -634,6 +680,7 @@ def network_stats(history, regression, classification, view, save, save_folder =
   final_train_loss = history['loss'][-1]
   final_valid_loss = history['val_loss'][-1]
   axs[0].set_title('Loss (train {:.2f}, val {:.2f})'.format(final_train_loss, final_valid_loss))
+  print()
   print('Train Loss: \t\t', final_train_loss)
   print('Valid Loss: \t\t', final_valid_loss)
 
@@ -681,14 +728,15 @@ def network_stats(history, regression, classification, view, save, save_folder =
   if save:
     general_utils.create_folder_if_not_exist(save_folder)
     figname = os.path.join(save_folder, '{0} - v1_all_var_metrics.png'.format(save_name))
-    fig.savefig(figname, bbox_inches='tight')
+    fig.savefig(figname, bbox_inches='tight', dpi=2000) # https://stackoverflow.com/questions/39870642/matplotlib-how-to-plot-a-high-resolution-graph
 
   if view:
     plt.show()
   else:
     plt.close()
 
-  print('\nModel stats computed')
+  print('Model stats {}.'.format('saved' if save else 'shown'))
+
 
 
 
@@ -703,9 +751,20 @@ def network_evaluate(model, data_files, input_size, batch_size,
                                     backgrounds, bg_smoothmask, 
                                     aug_prob=0, noises=[], repeat=1)
   
-  # --- Evaluation
-
+  # --- Built-in evaluation
+  
   evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
   for key in sorted(evaluate_metrics.keys()):
     key_name = key.replace('_keras', '') if key != 'loss' else 'test_loss'
     print('{}: \t {:.3f}'.format(key_name, evaluate_metrics[key]))
+  
+  # --- Custom evaluation
+
+  # dataset = np.array(list(generator_test.as_numpy_iterator()))
+  # pred = model.predict(dataset)
+  # for vi in range(4):
+  #   y_true = test_y[vi]
+  #   y_pred = pred[vi]
+  #   print(general_utils.variables_names[vi], 'rmse\t', np.math.sqrt(mean_squared_error(y_true, y_pred)))
+  #   print(general_utils.variables_names[vi], 'r2\t', r2_score(y_true, y_pred))
+  #   print()

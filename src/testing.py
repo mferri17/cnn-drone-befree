@@ -103,7 +103,7 @@ def test_models_datasets(model_paths, data_folders, batch_size, bgs_folders, bg_
       
       for bp in bgs_folders:
         print('\n----- BACKGROUND replacement with', bp, '\n')
-        bgs = network_utils.load_backgrounds(bp, bg_smoothmask=bg_smoothmask)
+        bgs = network_utils.load_backgrounds(bp, bg_smoothmask)
 
         network_utils.network_evaluate(model, list_files, input_shape, batch_size,
                                         regression, classification, bgs, bg_smoothmask)

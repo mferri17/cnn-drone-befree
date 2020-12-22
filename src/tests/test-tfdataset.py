@@ -12,10 +12,10 @@ import matplotlib.pyplot as plt
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 
-### CUSTOM IMPORTS
-sys.path.append('.')
-from functions import general_utils
-from functions import network_utils
+# ### CUSTOM IMPORTS
+# sys.path.append('.')
+# from functions import general_utils
+# from functions import network_utils
 
 
 
@@ -115,6 +115,7 @@ def parse_input_and_preprocess(filename, backgrounds_paths):
 ######### TEST 3
 
 def test3():
+  pass
 
   ### 1
 

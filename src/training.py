@@ -88,7 +88,7 @@ def train_with_generator(data_folder, network_weights_path, data_len,
     with open(list_files[0], 'br') as first:
         input_shape = pickle.load(first)['image'].shape
 
-    backgrounds = network_utils.load_backgrounds(backgrounds_folder, backgrounds_len, bg_smoothmask)
+    backgrounds = network_utils.load_backgrounds(backgrounds_folder, bg_smoothmask, backgrounds_len)
     noises = network_utils.load_noises(noise_folder)
 
     # --- Naming
