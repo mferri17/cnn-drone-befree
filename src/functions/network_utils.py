@@ -742,6 +742,7 @@ def network_stats(history, regression, classification, view, save, save_folder =
 
 
 
+from sklearn.metrics import r2_score, mean_squared_error
 
 def network_evaluate(model, data_files, input_size, batch_size,
                      regression, classification, backgrounds=[], bg_smoothmask=False):
@@ -756,6 +757,7 @@ def network_evaluate(model, data_files, input_size, batch_size,
   
   # --- Built-in evaluation
   
+  print('Keras evaluation')
   evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
   for key in sorted(evaluate_metrics.keys()):
     key_name = key.replace('_keras', '') if key != 'loss' else 'test_loss'
@@ -763,11 +765,23 @@ def network_evaluate(model, data_files, input_size, batch_size,
   
   # --- Custom evaluation
 
-  # dataset = np.array(list(generator_test.as_numpy_iterator()))
-  # pred = model.predict(dataset)
-  # for vi in range(4):
-  #   y_true = test_y[vi]
-  #   y_pred = pred[vi]
-  #   print(general_utils.variables_names[vi], 'rmse\t', np.math.sqrt(mean_squared_error(y_true, y_pred)))
-  #   print(general_utils.variables_names[vi], 'r2\t', r2_score(y_true, y_pred))
-  #   print()
+  data = np.array(list(generator_test.as_numpy_iterator()), dtype=object)
+  data_x = np.vstack(data[:,0][:])
+
+  y = np.vstack(data[:,1])
+  yx = np.hstack([batch[0]['x_pred'] for batch in y])
+  yy = np.hstack([batch[0]['y_pred'] for batch in y])
+  yz = np.hstack([batch[0]['z_pred'] for batch in y])
+  yw = np.hstack([batch[0]['yaw_pred'] for batch in y])
+  data_y = np.array([yx, yy, yz, yw])
+  
+  pred = model.predict(generator_test)
+  print('\nSklearn evaluation')
+
+  for vi in range(4):
+    y_true = data_y[vi]
+    y_pred = pred[vi]
+    print(general_utils.variables_names[vi], 'rmse\t', np.math.sqrt(mean_squared_error(y_true, y_pred)))
+    print(general_utils.variables_names[vi], 'r2\t', r2_score(y_true, y_pred))
+
+  
