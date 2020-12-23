@@ -742,7 +742,7 @@ def network_stats(history, regression, classification, view, save, save_folder =
 
 
 
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 def network_evaluate(model, data_files, input_size, batch_size,
                      regression, classification, backgrounds=[], bg_smoothmask=False):
@@ -781,6 +781,7 @@ def network_evaluate(model, data_files, input_size, batch_size,
   for vi in range(4):
     y_true = data_y[vi]
     y_pred = pred[vi]
+    print(general_utils.variables_names[vi], 'mae\t', mean_absolute_error(y_true, y_pred)) # same as loss
     print(general_utils.variables_names[vi], 'rmse\t', np.math.sqrt(mean_squared_error(y_true, y_pred)))
     print(general_utils.variables_names[vi], 'r2\t', r2_score(y_true, y_pred))
 
