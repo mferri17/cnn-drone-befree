@@ -9,6 +9,7 @@ CUDA_VISIBLE_DEVICES=3 python3 ./training.py 0 \
 --batch_size 64 \
 --epochs 60 \
 --oversampling 3 \
+--val_not_shuffle \
 --retrain_from 0 \
 --verbose 2 \
 --lr_reducer \

@@ -554,7 +554,7 @@ def network_train_generator(model, input_size, data_files,
                                      backgrounds, bg_smoothmask, aug_prob, noises, cache=True, repeat=oversampling)
                                      
   generator_valid = tfdata_generator(data_files_valid, input_size, batch_size,
-                                     backgrounds, bg_smoothmask, aug_prob, noises, cache=True, repeat=1)
+                                     backgrounds, bg_smoothmask, 0, [], cache=True, repeat=1)
 
   # --- Training
 
