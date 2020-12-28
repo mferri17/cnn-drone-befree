@@ -165,6 +165,7 @@ def get_args():
   debug_batch_size = 4
   debug_epochs = 2
   debug_oversampling = 1
+  debug_bgs_len = 100
 
   parser = argparse.ArgumentParser(description='Train the network on the given dataset using a generator which performs dynamic loading and data augmentation.')
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
@@ -184,7 +185,7 @@ def get_args():
   parser.add_argument('--profiler', action='store_true', help='specify the argument if you want to use TensorBoard profiler callback')
   parser.add_argument('--profiler_dir', type=dir_path, metavar='PD', help='path in which to save TensorBoard logs')
   parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
-  parser.add_argument('--bgs_len', type=int, default=None, metavar='BL', help='max number of backgrounds to consider (default = entire bgs_folder content)')
+  parser.add_argument('--bgs_len', type=int, default=None, metavar='BL', help='max number of backgrounds to consider (default = entire bgs_folder content, debug = {})'.format(debug_bgs_len))
   parser.add_argument('--bgs_name', type=str, default=None, metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
   parser.add_argument('--bg_smoothmask', action='store_true', help='specify the argument if you want to smooth the mask before replacing the background')
   # parser.add_argument('--augmentation', action='store_true', help='specify the argument if you want to perform standard image augmentation')
@@ -201,6 +202,7 @@ def get_args():
     parsed_args.batch_size = debug_batch_size
     parsed_args.epochs = debug_epochs
     parsed_args.oversampling = debug_oversampling
+    parsed_args.bgs_len = debug_bgs_len
 
   return parsed_args
 

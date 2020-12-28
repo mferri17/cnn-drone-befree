@@ -4,4 +4,5 @@ CUDA_VISIBLE_DEVICES=0 python3 ./training.py 0 \
 --weights_path /project/models/v1_original_weights.pickle \
 --verbose 2 \
 --lr_reducer \
+--val_not_shuffle \
 --debug

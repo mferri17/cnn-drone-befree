@@ -5,4 +5,5 @@ C:/Users/96mar/Desktop/meeting_dario/data/orig_train_63720/ ^
 --verbose 2 ^
 --lr_reducer ^
 --save_folder ./../../dev-models/training_tfdata ^
+--val_not_shuffle ^
 --debug

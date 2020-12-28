@@ -463,7 +463,7 @@ def map_preprocessing(img, gt):
   return x, y
 
 
-def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob, noises,
+def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, aug_prob=0, noises=[],
                      prefetch=True, parallelize=True, deterministic=False, cache=False, repeat=1):
 
   map_parallel = tf.data.experimental.AUTOTUNE if parallelize else None
@@ -473,7 +473,8 @@ def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, 
 
   if cache:
     gen = gen.cache()
-    gen = gen.shuffle(len(files), reshuffle_each_iteration=True)
+    if not deterministic:
+      gen = gen.shuffle(len(files), reshuffle_each_iteration=True)
 
   gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds, bg_smoothmask), map_parallel, deterministic)
   gen = gen.map(lambda img, gt: map_augmentation(img, gt, aug_prob, noises), map_parallel, deterministic)
@@ -487,11 +488,44 @@ def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, 
   return gen
     
 
+@tf.function
 def r2_keras(y_true, y_pred):
+  # if tf.random.uniform([]) < 0.05:
+  #   tf.print(y_true.shape, y_pred.shape) # (4, 1)
+  #   tf.print(y_true)
+  #   tf.print(y_pred)
+  # tf.print('a', y_true, y_pred)
+
   # from https://www.kaggle.com/c/mercedes-benz-greener-manufacturing/discussion/34019
   SS_res =  K.sum(K.square(y_true - y_pred)) 
   SS_tot = K.sum(K.square(y_true - K.mean(y_true))) 
-  return (1 - SS_res/(SS_tot + K.epsilon()))
+  result = (1 - SS_res/(SS_tot + K.epsilon()))
+  # tf.print(result)
+  return result
+
+
+class CustomMetricR2(tf.keras.metrics.Metric):
+  def __init__(self, name="r2", **kwargs):
+    super(CustomMetricR2, self).__init__(name=name, **kwargs)
+    self.y_true = tf.convert_to_tensor([])
+    self.y_pred = tf.convert_to_tensor([])
+
+  def update_state(self, y_true, y_pred, sample_weight=None):
+    self.y_true = tf.concat([self.y_true, tf.squeeze(y_true)], axis=0)
+    self.y_pred = tf.concat([self.y_pred, tf.squeeze(y_pred)], axis=0)
+
+  def result(self):
+    # r2 = r2_score(self.y_true, self.y_pred)
+    SS_res =  K.sum(K.square(self.y_true - self.y_pred)) 
+    SS_tot = K.sum(K.square(self.y_true - K.mean(self.y_true))) 
+    r2 = (1 - SS_res/(SS_tot + K.epsilon()))
+    # tf.print(r2)
+    return r2
+
+  def reset_states(self):
+    # The state of the metric will be reset at the start of each epoch.
+    self.y_true = tf.convert_to_tensor([])
+    self.y_pred = tf.convert_to_tensor([])
 
 
 def network_compile(model, regression, classification):
@@ -503,13 +537,22 @@ def network_compile(model, regression, classification):
     loss.extend(['mean_absolute_error'] * 4)
     metrics.append('mse')
     metrics.append(r2_keras)
+    metrics.append(CustomMetricR2())
+    
   if classification:
     loss.extend(['categorical_crossentropy'] * 4)
     metrics.append('accuracy')
 
   model.compile(loss=loss,
                 metrics=metrics,
-                optimizer='adam')
+                optimizer='adam',
+                run_eagerly=True) 
+
+  # without run_eagerly I get the error: An op outside of the function building code is being passed a "Graph" tensor.
+  #   best solution, but hard https://github.com/tensorflow/tensorflow/issues/32889
+  #   workaround https://github.com/tensorflow/tensorflow/issues/27519#issuecomment-662096683
+  #   however, running tf.executing_eagerly() before the compile, it seems that TF is already executing eagerly 
+  #   PLEASE note that run_eagerly seriously decreases time performance
   
   return model
 
@@ -522,7 +565,6 @@ def network_train_generator(model, input_size, data_files,
                             use_profiler = False, profiler_dir = '.\\logs', time_train = True):
 
   # --- Compilation
-
   model = network_compile(model, regression, classification)
 
   # --- Callbacks
@@ -542,7 +584,7 @@ def network_train_generator(model, input_size, data_files,
     callbacks.append(tensorboard)
 
   # --- Data
-    
+  
   from sklearn.model_selection import train_test_split
   data_files_train, data_files_valid = train_test_split(data_files, test_size=validation_split, 
                                                         shuffle=validation_shuffle, random_state=1) # TODO remove seed
@@ -551,10 +593,12 @@ def network_train_generator(model, input_size, data_files,
   noises = tf.convert_to_tensor(noises) # saves time during training
 
   generator_train = tfdata_generator(data_files_train, input_size, batch_size,
-                                     backgrounds, bg_smoothmask, aug_prob, noises, cache=True, repeat=oversampling)
+                                     backgrounds, bg_smoothmask, aug_prob, noises, 
+                                     deterministic=False, cache=True, repeat=oversampling)
                                      
   generator_valid = tfdata_generator(data_files_valid, input_size, batch_size,
-                                     backgrounds, bg_smoothmask, 0, [], cache=True, repeat=1)
+                                     backgrounds, bg_smoothmask, aug_prob=0, noises=[], 
+                                     deterministic=True, cache=True, repeat=1)
 
   # --- Training
 
@@ -583,36 +627,71 @@ def network_train_generator(model, input_size, data_files,
     original_stdout = sys.stdout # Save a reference to the original standard output
     timestr = time.strftime("%Y%m%d_%H%M%S")
     save_name = '{} evaluation after training.txt'.format(timestr)
-    # save_path = os.path.join("./../../dev-models/training_tfdata/", save_name)
-    save_path = os.path.join("/project/save/", save_name)
+    save_path = os.path.join("./../../dev-models/training_tfdata_tests/", save_name)
+    # save_path = os.path.join("/project/save/", save_name)
     output_file = open(save_path, 'w')
     print('Printing on', save_path)
     sys.stdout = output_file # Change the standard output to the file we created.
 
     print('\nEvaluation started...')
     
-    print('\n----- on validation set as-is (should provide same results as validation during training)')
+    print('\n----- on validation set as-is (should provide same results as validation during training)\n')
 
     evaluate_metrics = model.evaluate(generator_valid, verbose=0, return_dict=True)
-    print(evaluate_metrics)
-    for key in sorted(evaluate_metrics.keys()):
-      key_name = key.replace('_keras', '') if key != 'loss' else 'test_loss'
-      print('{}: \t {:.3f}'.format(key_name, evaluate_metrics[key]))
+    
+    print('TOTAL LOSS \t\t', evaluate_metrics['loss'])
+    
+    for mn in ['loss', 'mse', 'r2_keras', 'r2']:
+      current = []
+      for vn in general_utils.variables_names[:4]:
+        current.append(evaluate_metrics['{}_{}'.format(vn, mn)])
 
-    print('\n----- on validation set with network_evaluate on original images')
+      name = mn.replace('_keras', '').upper()
+      values = ' '.join(['{:.08f}'.format(value) for value in current])
+      print('[x, y, z, w] {} \t [{}]'.format(name, values))
+
+    print('\n--SKLEARN EVALUATION\n')
+      
+    data = np.array(list(generator_valid.as_numpy_iterator()), dtype=object)
+    data_x = np.vstack(data[:,0][:])
+    print('data_x shape', data_x.shape)
+    
+    y = np.vstack(data[:,1])
+    yx = np.hstack([batch[0]['x_pred'] for batch in y])
+    yy = np.hstack([batch[0]['y_pred'] for batch in y])
+    yz = np.hstack([batch[0]['z_pred'] for batch in y])
+    yw = np.hstack([batch[0]['yaw_pred'] for batch in y])
+    data_y = np.array([yx, yy, yz, yw])
+    print('data_y shape', data_y.shape)
+
+    pred = model.predict(generator_valid)
+    pred = np.squeeze(np.array(pred))
+
+    y_transposed = np.transpose(data_y)
+    p_transposed = np.transpose(pred)
+    # print(y_transposed.shape, p_transposed.shape) # required in the shape (n_samples, n_outputs)
+
+    print('MAE SUM (loss) \t\t', np.sum(mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')))
+    print('R2 MEAN \t\t', r2_score(y_transposed, p_transposed))
+    print('[x, y, z, w] MAE \t', mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')) # same as loss
+    print('[x, y, z, w] MSE \t', mean_squared_error(y_transposed, p_transposed, multioutput='raw_values'))
+    print('[x, y, z, w] RMSE \t', np.sqrt(mean_squared_error(y_transposed, p_transposed, multioutput='raw_values')))
+    print('[x, y, z, w] R2 \t', r2_score(y_transposed, p_transposed, multioutput='raw_values'))
+
+    print('\n----- on validation set with network_evaluate on original images\n')
 
     network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification)
 
-    print('\n----- on validation set with network_evaluate on indoor1 background')
+    print('\n----- on validation set with network_evaluate on INDOOR1 background\n')
 
-    # bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
-    bgs_valid = load_backgrounds('/project/backgrounds/indoor1/', bg_smoothmask)
+    bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
+    # bgs_valid = load_backgrounds('/project/backgrounds/indoor1/', bg_smoothmask)
     network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
 
-    print('\n----- on validation set with network_evaluate on indoor2 background')
+    print('\n----- on validation set with network_evaluate on INDOOR2 background\n')
 
-    # bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
-    bgs_valid = load_backgrounds('/project/backgrounds/indoor2/', bg_smoothmask)
+    bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor2/', bg_smoothmask)
+    # bgs_valid = load_backgrounds('/project/backgrounds/indoor2/', bg_smoothmask)
     network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
     
     print('\nEvaluation finished.')
@@ -744,45 +823,62 @@ def network_stats(history, regression, classification, view, save, save_folder =
 
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
-def network_evaluate(model, data_files, input_size, batch_size,
-                     regression, classification, backgrounds=[], bg_smoothmask=False):
+def network_evaluate(model, data_files, input_size, batch_size, regression, classification, 
+                     backgrounds=[], bg_smoothmask=False, aug_prob=0, noises=[]):
   
   # --- Data
 
   backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
 
-  generator_test = tfdata_generator(data_files, input_size, batch_size,
-                                    backgrounds, bg_smoothmask, 
-                                    aug_prob=0, noises=[], repeat=1)
-  
-  # --- Built-in evaluation
-  
-  print('Keras evaluation')
-  evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
-  for key in sorted(evaluate_metrics.keys()):
-    key_name = key.replace('_keras', '') if key != 'loss' else 'test_loss'
-    print('{}: \t {:.3f}'.format(key_name, evaluate_metrics[key]))
-  
-  # --- Custom evaluation
+  # print([fn.split(' ')[-1] for fn in data_files[:5]])
+  # data_files = data_files[:4] # if uncommented, keras and sklearn produce the same result... so keras is computing R2 just for the first batch
 
+  generator_test = tfdata_generator(data_files, input_size, batch_size,
+                                    backgrounds, bg_smoothmask, aug_prob, noises, 
+                                    deterministic=True, cache=True, repeat=1)                
+  
   data = np.array(list(generator_test.as_numpy_iterator()), dtype=object)
   data_x = np.vstack(data[:,0][:])
-
   y = np.vstack(data[:,1])
   yx = np.hstack([batch[0]['x_pred'] for batch in y])
   yy = np.hstack([batch[0]['y_pred'] for batch in y])
   yz = np.hstack([batch[0]['z_pred'] for batch in y])
   yw = np.hstack([batch[0]['yaw_pred'] for batch in y])
   data_y = np.array([yx, yy, yz, yw])
-  
-  pred = model.predict(generator_test)
-  print('\nSklearn evaluation')
+  print('data_x shape', data_x.shape)
+  print('data_y shape', data_y.shape)
 
-  for vi in range(4):
-    y_true = data_y[vi]
-    y_pred = pred[vi]
-    print(general_utils.variables_names[vi], 'mae\t', mean_absolute_error(y_true, y_pred)) # same as loss
-    print(general_utils.variables_names[vi], 'rmse\t', np.math.sqrt(mean_squared_error(y_true, y_pred)))
-    print(general_utils.variables_names[vi], 'r2\t', r2_score(y_true, y_pred))
+  # --- Built-in evaluation
+
+  print('\n--KERAS EVALUATION ON GENERATOR\n')
+  evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
+  
+  print('TOTAL LOSS \t\t', evaluate_metrics['loss'])
+  
+  for mn in ['loss', 'mse', 'r2_keras', 'r2']:
+    current = []
+    for vn in general_utils.variables_names[:4]:
+      current.append(evaluate_metrics['{}_{}'.format(vn, mn)])
+
+    name = mn.replace('_keras', '').upper()
+    values = ' '.join(['{:.08f}'.format(value) for value in current])
+    print('[x, y, z, w] {} \t [{}]'.format(name, values))
+  
+  # --- Custom evaluation
+  
+  print('\n--SKLEARN EVALUATION\n')
+  pred = model.predict(generator_test)
+  pred = np.squeeze(np.array(pred))
+
+  y_transposed = np.transpose(data_y)
+  p_transposed = np.transpose(pred)
+  # print(y_transposed.shape, p_transposed.shape) # required in the shape (n_samples, n_outputs)
+
+  print('MAE SUM (loss) \t\t', np.sum(mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')))
+  print('R2 MEAN \t\t', r2_score(y_transposed, p_transposed))
+  print('[x, y, z, w] MAE \t', mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')) # same as loss
+  print('[x, y, z, w] MSE \t', mean_squared_error(y_transposed, p_transposed, multioutput='raw_values'))
+  print('[x, y, z, w] RMSE \t', np.sqrt(mean_squared_error(y_transposed, p_transposed, multioutput='raw_values')))
+  print('[x, y, z, w] R2 \t', r2_score(y_transposed, p_transposed, multioutput='raw_values'))
 
   
