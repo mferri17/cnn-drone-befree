@@ -68,7 +68,7 @@ from functions import network_utils
 def train_with_generator(data_folder, network_weights_path, data_len,
                          regression, classification,
                          retrain_from, verbose, batch_size, epochs, oversampling, val_not_shuffle,
-                         use_lr_reducer, use_early_stop, 
+                         use_lr_reducer, use_early_stop, compute_r2,
                          use_profiler, profile_dir,
                          backgrounds_folder, backgrounds_len, backgrounds_name, bg_smoothmask,
                          augmentation_prob, noise_folder,
@@ -124,9 +124,9 @@ def train_with_generator(data_folder, network_weights_path, data_len,
       backgrounds, bg_smoothmask,
       augmentation_prob, noises,
       batch_size, epochs, oversampling, verbose, 
-      validation_shuffle=(not val_not_shuffle),
-      use_lr_reducer=use_lr_reducer, use_early_stop=use_early_stop, 
-      use_profiler=use_profiler, profiler_dir=profile_dir
+      0.3, (not val_not_shuffle),
+      use_lr_reducer, use_early_stop, compute_r2,
+      use_profiler, profile_dir
     )
 
     if view_stats or save_stats:
@@ -182,6 +182,7 @@ def get_args():
   parser.add_argument('--verbose', type=int, default=2, metavar='VER', help='keras training verbosity (0: silent, 1: complete, 2: one line per epoch')
   parser.add_argument('--lr_reducer', action='store_true', help='specify the argument if you want to use learning rate reducer callback')
   parser.add_argument('--early_stop', action='store_true', help='specify the argument if you want to use early stop callback')
+  parser.add_argument('--compute_r2', action='store_true', help='specify the argument if you want to compute R2 (please note that it dramatically increases training time)')
   parser.add_argument('--profiler', action='store_true', help='specify the argument if you want to use TensorBoard profiler callback')
   parser.add_argument('--profiler_dir', type=dir_path, metavar='PD', help='path in which to save TensorBoard logs')
   parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
@@ -226,7 +227,7 @@ if __name__ == "__main__":
   train_with_generator(
     args.data_folder, args.weights_path, args.data_len, args.regression, args.classification,
     args.retrain_from, args.verbose, args.batch_size, args.epochs, args.oversampling, args.val_not_shuffle,
-    args.lr_reducer, args.early_stop, args.profiler, args.profiler_dir,
+    args.lr_reducer, args.early_stop, args.compute_r2, args.profiler, args.profiler_dir,
     args.bgs_folder, args.bgs_len, args.bgs_name, args.bg_smoothmask, args.aug_prob, args.noise_folder,
     args.view_stats, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )

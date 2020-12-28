@@ -75,7 +75,6 @@ def test_models_datasets(model_paths, data_folders, batch_size, bgs_folders, bg_
   classification = False
 
   bgs_folders.insert(0, None) # so that we can also consider the dataset without any background replacement
-  dependencies = { 'r2_keras': network_utils.r2_keras } # see https://stackoverflow.com/a/55652105/10866825
 
   if save:
     original_stdout = sys.stdout # Save a reference to the original standard output
@@ -94,10 +93,9 @@ def test_models_datasets(model_paths, data_folders, batch_size, bgs_folders, bg_
     print('Evaluation on DATASET from', dp)
     
     model = network_utils.network_create(input_shape, regression, classification, retrain_from_layer=0, view_summary=False)
-    model = network_utils.network_compile(model, regression, classification)
+    model = network_utils.network_compile(model, regression, classification, compute_r2=True)
     
     for mp in model_paths:
-      # model = tf.keras.models.load_model(mp, custom_objects=dependencies)
       model.load_weights(mp, by_name=True)
       print('\n--------------------- MODEL imported from', mp)
       

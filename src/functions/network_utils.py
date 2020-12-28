@@ -371,9 +371,6 @@ def map_replace_background(img, mask, gt, backgrounds, smooth_mask):
         # img, mask and bg can be uint8
         mask_stack = mask[:,:,np.newaxis] # add 3rd dimension for broadcasting
         img = (mask_stack * img) + ((1-mask_stack) * bg) # Blend
-    
-    # else:
-    #   tf.numpy_function(save_img, [img], [], 'save_img')
   
   img.set_shape(img_shape)
   return img, gt
@@ -473,7 +470,7 @@ def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, 
 
   if cache:
     gen = gen.cache()
-    if not deterministic:
+    if not deterministic: # shuffling would destroy determinism
       gen = gen.shuffle(len(files), reshuffle_each_iteration=True)
 
   gen = gen.map(lambda img, mask, gt: map_replace_background(img, mask, gt, backgrounds, bg_smoothmask), map_parallel, deterministic)
@@ -488,22 +485,6 @@ def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, 
   return gen
     
 
-@tf.function
-def r2_keras(y_true, y_pred):
-  # if tf.random.uniform([]) < 0.05:
-  #   tf.print(y_true.shape, y_pred.shape) # (4, 1)
-  #   tf.print(y_true)
-  #   tf.print(y_pred)
-  # tf.print('a', y_true, y_pred)
-
-  # from https://www.kaggle.com/c/mercedes-benz-greener-manufacturing/discussion/34019
-  SS_res =  K.sum(K.square(y_true - y_pred)) 
-  SS_tot = K.sum(K.square(y_true - K.mean(y_true))) 
-  result = (1 - SS_res/(SS_tot + K.epsilon()))
-  # tf.print(result)
-  return result
-
-
 class CustomMetricR2(tf.keras.metrics.Metric):
   def __init__(self, name="r2", **kwargs):
     super(CustomMetricR2, self).__init__(name=name, **kwargs)
@@ -515,11 +496,9 @@ class CustomMetricR2(tf.keras.metrics.Metric):
     self.y_pred = tf.concat([self.y_pred, tf.squeeze(y_pred)], axis=0)
 
   def result(self):
-    # r2 = r2_score(self.y_true, self.y_pred)
     SS_res =  K.sum(K.square(self.y_true - self.y_pred)) 
     SS_tot = K.sum(K.square(self.y_true - K.mean(self.y_true))) 
     r2 = (1 - SS_res/(SS_tot + K.epsilon()))
-    # tf.print(r2)
     return r2
 
   def reset_states(self):
@@ -528,16 +507,23 @@ class CustomMetricR2(tf.keras.metrics.Metric):
     self.y_pred = tf.convert_to_tensor([])
 
 
-def network_compile(model, regression, classification):
+def network_compile(model, regression, classification, compute_r2=False):
 
   loss = []
   metrics = []
+  eager = False
 
   if regression:
     loss.extend(['mean_absolute_error'] * 4)
     metrics.append('mse')
-    metrics.append(r2_keras)
-    metrics.append(CustomMetricR2())
+    if compute_r2:
+      metrics.append(CustomMetricR2())
+      eager = True
+      # Computing R2 without run_eagerly=True, I get the error: An op outside of the function building code is being passed a "Graph" tensor.
+      #   best solution, but hard https://github.com/tensorflow/tensorflow/issues/32889
+      #   workaround https://github.com/tensorflow/tensorflow/issues/27519#issuecomment-662096683
+      #   however, running tf.executing_eagerly() before the compile, it seems that TF is already executing eagerly 
+      #   PLEASE note that run_eagerly seriously decreases time performance
     
   if classification:
     loss.extend(['categorical_crossentropy'] * 4)
@@ -546,13 +532,8 @@ def network_compile(model, regression, classification):
   model.compile(loss=loss,
                 metrics=metrics,
                 optimizer='adam',
-                run_eagerly=True) 
+                run_eagerly=eager) 
 
-  # without run_eagerly I get the error: An op outside of the function building code is being passed a "Graph" tensor.
-  #   best solution, but hard https://github.com/tensorflow/tensorflow/issues/32889
-  #   workaround https://github.com/tensorflow/tensorflow/issues/27519#issuecomment-662096683
-  #   however, running tf.executing_eagerly() before the compile, it seems that TF is already executing eagerly 
-  #   PLEASE note that run_eagerly seriously decreases time performance
   
   return model
 
@@ -561,11 +542,11 @@ def network_train_generator(model, input_size, data_files,
                             regression, classification, backgrounds, bg_smoothmask, aug_prob, noises = [],
                             batch_size = 64, epochs = 30, oversampling = 1, verbose = 2,
                             validation_split = 0.3, validation_shuffle = True,
-                            use_lr_reducer = True, use_early_stop = False, 
+                            use_lr_reducer = True, use_early_stop = False, compute_r2 = False,
                             use_profiler = False, profiler_dir = '.\\logs', time_train = True):
 
   # --- Compilation
-  model = network_compile(model, regression, classification)
+  model = network_compile(model, regression, classification, compute_r2)
 
   # --- Callbacks
 
@@ -620,84 +601,41 @@ def network_train_generator(model, input_size, data_files,
   if time_train:
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
 
-  # --- Evaluation
+  # # --- Evaluation
   
-  if True:
+  # if True:
 
-    original_stdout = sys.stdout # Save a reference to the original standard output
-    timestr = time.strftime("%Y%m%d_%H%M%S")
-    save_name = '{} evaluation after training.txt'.format(timestr)
-    save_path = os.path.join("./../../dev-models/training_tfdata_tests/", save_name)
-    # save_path = os.path.join("/project/save/", save_name)
-    output_file = open(save_path, 'w')
-    print('Printing on', save_path)
-    sys.stdout = output_file # Change the standard output to the file we created.
+  #   original_stdout = sys.stdout # Save a reference to the original standard output
+  #   timestr = time.strftime("%Y%m%d_%H%M%S")
+  #   save_name = '{} evaluation after training.txt'.format(timestr)
+  #   save_path = os.path.join("./../../dev-models/training_tfdata_tests/", save_name)
+  #   # save_path = os.path.join("/project/save/", save_name)
+  #   output_file = open(save_path, 'w')
+  #   print('Printing on', save_path)
+  #   sys.stdout = output_file # Change the standard output to the file we created.
 
-    print('\nEvaluation started...')
+  #   print('\nEvaluation started...')
+
+  #   print('\n----- on validation set with network_evaluate on original images')
+
+  #   network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification)
+
+  #   print('\n----- on validation set with network_evaluate on INDOOR1 background')
+
+  #   bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
+  #   # bgs_valid = load_backgrounds('/project/backgrounds/indoor1/', bg_smoothmask)
+  #   network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
+
+  #   print('\n----- on validation set with network_evaluate on INDOOR2 background')
+
+  #   bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor2/', bg_smoothmask)
+  #   # bgs_valid = load_backgrounds('/project/backgrounds/indoor2/', bg_smoothmask)
+  #   network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
     
-    print('\n----- on validation set as-is (should provide same results as validation during training)\n')
+  #   print('\nEvaluation finished.')
 
-    evaluate_metrics = model.evaluate(generator_valid, verbose=0, return_dict=True)
-    
-    print('TOTAL LOSS \t\t', evaluate_metrics['loss'])
-    
-    for mn in ['loss', 'mse', 'r2_keras', 'r2']:
-      current = []
-      for vn in general_utils.variables_names[:4]:
-        current.append(evaluate_metrics['{}_{}'.format(vn, mn)])
-
-      name = mn.replace('_keras', '').upper()
-      values = ' '.join(['{:.08f}'.format(value) for value in current])
-      print('[x, y, z, w] {} \t [{}]'.format(name, values))
-
-    print('\n--SKLEARN EVALUATION\n')
-      
-    data = np.array(list(generator_valid.as_numpy_iterator()), dtype=object)
-    data_x = np.vstack(data[:,0][:])
-    print('data_x shape', data_x.shape)
-    
-    y = np.vstack(data[:,1])
-    yx = np.hstack([batch[0]['x_pred'] for batch in y])
-    yy = np.hstack([batch[0]['y_pred'] for batch in y])
-    yz = np.hstack([batch[0]['z_pred'] for batch in y])
-    yw = np.hstack([batch[0]['yaw_pred'] for batch in y])
-    data_y = np.array([yx, yy, yz, yw])
-    print('data_y shape', data_y.shape)
-
-    pred = model.predict(generator_valid)
-    pred = np.squeeze(np.array(pred))
-
-    y_transposed = np.transpose(data_y)
-    p_transposed = np.transpose(pred)
-    # print(y_transposed.shape, p_transposed.shape) # required in the shape (n_samples, n_outputs)
-
-    print('MAE SUM (loss) \t\t', np.sum(mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')))
-    print('R2 MEAN \t\t', r2_score(y_transposed, p_transposed))
-    print('[x, y, z, w] MAE \t', mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')) # same as loss
-    print('[x, y, z, w] MSE \t', mean_squared_error(y_transposed, p_transposed, multioutput='raw_values'))
-    print('[x, y, z, w] RMSE \t', np.sqrt(mean_squared_error(y_transposed, p_transposed, multioutput='raw_values')))
-    print('[x, y, z, w] R2 \t', r2_score(y_transposed, p_transposed, multioutput='raw_values'))
-
-    print('\n----- on validation set with network_evaluate on original images\n')
-
-    network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification)
-
-    print('\n----- on validation set with network_evaluate on INDOOR1 background\n')
-
-    bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
-    # bgs_valid = load_backgrounds('/project/backgrounds/indoor1/', bg_smoothmask)
-    network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
-
-    print('\n----- on validation set with network_evaluate on INDOOR2 background\n')
-
-    bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor2/', bg_smoothmask)
-    # bgs_valid = load_backgrounds('/project/backgrounds/indoor2/', bg_smoothmask)
-    network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
-    
-    print('\nEvaluation finished.')
-
-    sys.stdout = original_stdout # Reset the standard output to its original value
-    output_file.close()
+  #   sys.stdout = original_stdout # Reset the standard output to its original value
+  #   output_file.close()
 
   return model, history
 
@@ -744,68 +682,80 @@ def network_save(folder, name, model, history, save_plot = False):
 def network_stats(history, regression, classification, view, save, save_folder = '', save_name = '',
                   dpi=300, save_pdf = False, scale_loss = None, scale_r2 = None, scale_acc = None):
 
-  if regression and classification:
-    fig, axs = plt.subplots(1, 3, figsize=(24,5))
-  else:
-    fig, axs = plt.subplots(1, 2, figsize=(16,5))
+  ncharts = 0
+  if 'loss' in history:
+    ncharts += 1
+  if 'x_pred_r2' in history:
+    ncharts += 1
+  if 'x_class_accuracy' in history:
+    ncharts += 1
 
+  print()
+  fig, axs = plt.subplots(1, ncharts, figsize=(8*ncharts,5))
   fig.suptitle(save_name)
+  counter = 0
+
+  if not isinstance(axs, np.ndarray):
+    axs = [axs] # just for easy indexing below 
 
   # - Loss
 
-  axs[0].plot(history['loss'], 'k--', label='Train Loss')
-  axs[0].plot(history['val_loss'], 'k', label='Valid Loss')
-  axs[0].legend(loc='upper right')
-  axs[0].set_xlabel('Epoch')
-  axs[0].set_ylim(scale_loss)
-  final_train_loss = history['loss'][-1]
-  final_valid_loss = history['val_loss'][-1]
-  axs[0].set_title('Loss (train {:.2f}, val {:.2f})'.format(final_train_loss, final_valid_loss))
-  print()
-  print('Train Loss: \t\t', final_train_loss)
-  print('Valid Loss: \t\t', final_valid_loss)
+  if 'loss' in history:
+    axs[counter].plot(history['loss'], 'k--', label='Train Loss')
+    axs[counter].plot(history['val_loss'], 'k', label='Valid Loss')
+    axs[counter].legend(loc='upper right')
+    axs[counter].set_xlabel('Epoch')
+    axs[counter].set_ylim(scale_loss)
+    final_train_loss = history['loss'][-1]
+    final_valid_loss = history['val_loss'][-1]
+    axs[counter].set_title('Loss (train {:.2f}, val {:.2f})'.format(final_train_loss, final_valid_loss))
+    print('Train Loss: \t\t', final_train_loss)
+    print('Valid Loss: \t\t', final_valid_loss)
+    counter += 1
 
   # - R2
   
-  if regression:
-    axs[1].plot(history['x_pred_r2_keras'], 'r--', label='x_class train R2')
-    axs[1].plot(history['val_x_pred_r2_keras'], 'r', label='x_class valid R2')
-    axs[1].plot(history['y_pred_r2_keras'], 'g--', label='y_class train R2')
-    axs[1].plot(history['val_y_pred_r2_keras'], 'g', label='y_class valid R2')
-    axs[1].plot(history['yaw_pred_r2_keras'], 'b--', label='z_class train R2')
-    axs[1].plot(history['val_yaw_pred_r2_keras'], 'b', label='z_class valid R2')
-    axs[1].plot(history['z_pred_r2_keras'], 'y--', label='w_class train R2')
-    axs[1].plot(history['val_z_pred_r2_keras'], 'y', label='w_class valid R2')
-    axs[1].legend(loc='lower right')
-    axs[1].set_xlabel('Epoch')
-    axs[1].set_ylabel('R2')
-    axs[1].set_ylim(scale_r2)
-    finals_train_r2 = [history['x_pred_r2_keras'][-1], history['y_pred_r2_keras'][-1], history['yaw_pred_r2_keras'][-1], history['z_pred_r2_keras'][-1]]
-    finals_valid_r2 = [history['val_x_pred_r2_keras'][-1], history['val_y_pred_r2_keras'][-1], history['val_yaw_pred_r2_keras'][-1], history['val_z_pred_r2_keras'][-1]]
-    axs[1].set_title('R2 (train {:.2f}, val {:.2f})'.format(np.mean(finals_train_r2), np.mean(finals_valid_r2)))
+  if 'x_pred_r2' in history:
+    axs[counter].plot(history['x_pred_r2'], 'r--', label='x_class train R2')
+    axs[counter].plot(history['val_x_pred_r2'], 'r', label='x_class valid R2')
+    axs[counter].plot(history['y_pred_r2'], 'g--', label='y_class train R2')
+    axs[counter].plot(history['val_y_pred_r2'], 'g', label='y_class valid R2')
+    axs[counter].plot(history['yaw_pred_r2'], 'b--', label='z_class train R2')
+    axs[counter].plot(history['val_yaw_pred_r2'], 'b', label='z_class valid R2')
+    axs[counter].plot(history['z_pred_r2'], 'y--', label='w_class train R2')
+    axs[counter].plot(history['val_z_pred_r2'], 'y', label='w_class valid R2')
+    axs[counter].legend(loc='lower right')
+    axs[counter].set_xlabel('Epoch')
+    axs[counter].set_ylabel('R2')
+    axs[counter].set_ylim(scale_r2)
+    finals_train_r2 = [history['x_pred_r2'][-1], history['y_pred_r2'][-1], history['yaw_pred_r2'][-1], history['z_pred_r2'][-1]]
+    finals_valid_r2 = [history['val_x_pred_r2'][-1], history['val_y_pred_r2'][-1], history['val_yaw_pred_r2'][-1], history['val_z_pred_r2'][-1]]
+    axs[counter].set_title('R2 (train {:.2f}, val {:.2f})'.format(np.mean(finals_train_r2), np.mean(finals_valid_r2)))
     print('Train R2 [x,y,z,w]: \t', finals_train_r2)
     print('Valid R2 [x,y,z,w]: \t', finals_valid_r2)
+    counter += 1
 
   # - Accuracy
   
-  if classification:
-    axs[-1].plot(history['x_class_accuracy'], 'r--', label='x_class train Accuracy')
-    axs[-1].plot(history['val_x_class_accuracy'], 'r', label='x_class valid Accuracy')
-    axs[-1].plot(history['y_class_accuracy'], 'g--', label='y_class train Accuracy')
-    axs[-1].plot(history['val_y_class_accuracy'], 'g', label='y_class valid Accuracy')
-    axs[-1].plot(history['z_class_accuracy'], 'b--', label='z_class train Accuracy')
-    axs[-1].plot(history['val_z_class_accuracy'], 'b', label='z_class valid Accuracy')
-    axs[-1].plot(history['w_class_accuracy'], 'y--', label='w_class train Accuracy')
-    axs[-1].plot(history['val_w_class_accuracy'], 'y', label='w_class valid Accuracy')
-    axs[-1].legend(loc='lower right')
-    axs[-1].set_xlabel('Epoch')
-    axs[-1].set_ylabel('Accuracy')
-    axs[-1].set_ylim(scale_acc)
+  if 'x_class_accuracy' in history:
+    axs[counter].plot(history['x_class_accuracy'], 'r--', label='x_class train Accuracy')
+    axs[counter].plot(history['val_x_class_accuracy'], 'r', label='x_class valid Accuracy')
+    axs[counter].plot(history['y_class_accuracy'], 'g--', label='y_class train Accuracy')
+    axs[counter].plot(history['val_y_class_accuracy'], 'g', label='y_class valid Accuracy')
+    axs[counter].plot(history['z_class_accuracy'], 'b--', label='z_class train Accuracy')
+    axs[counter].plot(history['val_z_class_accuracy'], 'b', label='z_class valid Accuracy')
+    axs[counter].plot(history['w_class_accuracy'], 'y--', label='w_class train Accuracy')
+    axs[counter].plot(history['val_w_class_accuracy'], 'y', label='w_class valid Accuracy')
+    axs[counter].legend(loc='lower right')
+    axs[counter].set_xlabel('Epoch')
+    axs[counter].set_ylabel('Accuracy')
+    axs[counter].set_ylim(scale_acc)
     finals_train_accur = [history['x_class_accuracy'][-1], history['y_class_accuracy'][-1], history['z_class_accuracy'][-1], history['w_class_accuracy'][-1]]
     finals_valid_accur = [history['val_x_class_accuracy'][-1], history['val_y_class_accuracy'][-1], history['val_z_class_accuracy'][-1], history['val_w_class_accuracy'][-1]]
-    axs[1].set_title('Accur (train {:.2f}, val {:.2f})'.format(np.mean(finals_train_accur), np.mean(finals_valid_accur)))
+    axs[counter].set_title('Accur (train {:.2f}, val {:.2f})'.format(np.mean(finals_train_accur), np.mean(finals_valid_accur)))
     print('Train Accur [x,y,z,w]: \t', finals_train_accur)
     print('Valid Accur [x,y,z,w]: \t', finals_valid_accur)
+    counter += 1
  
   if save:
     general_utils.create_folder_if_not_exist(save_folder)
@@ -845,8 +795,8 @@ def network_evaluate(model, data_files, input_size, batch_size, regression, clas
   yz = np.hstack([batch[0]['z_pred'] for batch in y])
   yw = np.hstack([batch[0]['yaw_pred'] for batch in y])
   data_y = np.array([yx, yy, yz, yw])
-  print('data_x shape', data_x.shape)
-  print('data_y shape', data_y.shape)
+  # print('data_x shape', data_x.shape)
+  # print('data_y shape', data_y.shape)
 
   # --- Built-in evaluation
 
@@ -855,24 +805,23 @@ def network_evaluate(model, data_files, input_size, batch_size, regression, clas
   
   print('TOTAL LOSS \t\t', evaluate_metrics['loss'])
   
-  for mn in ['loss', 'mse', 'r2_keras', 'r2']:
+  for metric in ['loss', 'mse', 'r2']:
     current = []
-    for vn in general_utils.variables_names[:4]:
-      current.append(evaluate_metrics['{}_{}'.format(vn, mn)])
+    for var in general_utils.variables_names[:4]:
+      metric_name = '{}_{}'.format(var, metric)
+      if metric_name in evaluate_metrics:
+        current.append(evaluate_metrics[metric_name])
 
-    name = mn.replace('_keras', '').upper()
     values = ' '.join(['{:.08f}'.format(value) for value in current])
-    print('[x, y, z, w] {} \t [{}]'.format(name, values))
+    print('[x, y, z, w] {} \t [{}]'.format(metric.upper(), values))
   
   # --- Custom evaluation
   
   print('\n--SKLEARN EVALUATION\n')
   pred = model.predict(generator_test)
   pred = np.squeeze(np.array(pred))
-
-  y_transposed = np.transpose(data_y)
-  p_transposed = np.transpose(pred)
-  # print(y_transposed.shape, p_transposed.shape) # required in the shape (n_samples, n_outputs)
+  y_transposed = np.transpose(data_y) # required in the shape (n_samples, n_outputs)
+  p_transposed = np.transpose(pred) # required in the shape (n_samples, n_outputs)
 
   print('MAE SUM (loss) \t\t', np.sum(mean_absolute_error(y_transposed, p_transposed, multioutput='raw_values')))
   print('R2 MEAN \t\t', r2_score(y_transposed, p_transposed))
