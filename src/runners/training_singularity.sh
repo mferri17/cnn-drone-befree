@@ -3,7 +3,7 @@
 # cd ..
 # singularity exec --nv --bind /home/marcofe/thesis/data:/project singularity/tf-latest.sif runners/training_singularity.sh
 
-CUDA_VISIBLE_DEVICES=3 python3 ./training.py 0 \
+CUDA_VISIBLE_DEVICES=0 python3 ./training.py 0 \
 /project/datasets/orig_train_63720 \
 --regression \
 --batch_size 64 \
@@ -13,6 +13,7 @@ CUDA_VISIBLE_DEVICES=3 python3 ./training.py 0 \
 --retrain_from 0 \
 --verbose 2 \
 --lr_reducer \
+--compute_r2 \
 --bgs_folder /project/backgrounds/indoorCVPR_09_PPDario_uint8 \
 --bgs_name bgCVPRindoor \
 --bg_smoothmask \

@@ -601,42 +601,6 @@ def network_train_generator(model, input_size, data_files,
   if time_train:
     print('\nTraining time: {:.2f} minutes\n'.format((time.monotonic() - start_time)/60))
 
-  # # --- Evaluation
-  
-  # if True:
-
-  #   original_stdout = sys.stdout # Save a reference to the original standard output
-  #   timestr = time.strftime("%Y%m%d_%H%M%S")
-  #   save_name = '{} evaluation after training.txt'.format(timestr)
-  #   save_path = os.path.join("./../../dev-models/training_tfdata_tests/", save_name)
-  #   # save_path = os.path.join("/project/save/", save_name)
-  #   output_file = open(save_path, 'w')
-  #   print('Printing on', save_path)
-  #   sys.stdout = output_file # Change the standard output to the file we created.
-
-  #   print('\nEvaluation started...')
-
-  #   print('\n----- on validation set with network_evaluate on original images')
-
-  #   network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification)
-
-  #   print('\n----- on validation set with network_evaluate on INDOOR1 background')
-
-  #   bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor1/', bg_smoothmask)
-  #   # bgs_valid = load_backgrounds('/project/backgrounds/indoor1/', bg_smoothmask)
-  #   network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
-
-  #   print('\n----- on validation set with network_evaluate on INDOOR2 background')
-
-  #   bgs_valid = load_backgrounds('C:/Users/96mar/Desktop/meeting_dario/data/aug/backgrounds_dario/indoor2/', bg_smoothmask)
-  #   # bgs_valid = load_backgrounds('/project/backgrounds/indoor2/', bg_smoothmask)
-  #   network_evaluate(model, data_files_valid, input_size, batch_size, regression, classification, bgs_valid, bg_smoothmask)
-    
-  #   print('\nEvaluation finished.')
-
-  #   sys.stdout = original_stdout # Reset the standard output to its original value
-  #   output_file.close()
-
   return model, history
 
 
@@ -780,13 +744,10 @@ def network_evaluate(model, data_files, input_size, batch_size, regression, clas
 
   backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
 
-  # print([fn.split(' ')[-1] for fn in data_files[:5]])
-  # data_files = data_files[:4] # if uncommented, keras and sklearn produce the same result... so keras is computing R2 just for the first batch
-
   generator_test = tfdata_generator(data_files, input_size, batch_size,
                                     backgrounds, bg_smoothmask, aug_prob, noises, 
-                                    deterministic=True, cache=True, repeat=1)                
-  
+                                    deterministic=True, cache=True, repeat=1)
+
   data = np.array(list(generator_test.as_numpy_iterator()), dtype=object)
   data_x = np.vstack(data[:,0][:])
   y = np.vstack(data[:,1])
@@ -797,27 +758,11 @@ def network_evaluate(model, data_files, input_size, batch_size, regression, clas
   data_y = np.array([yx, yy, yz, yw])
   # print('data_x shape', data_x.shape)
   # print('data_y shape', data_y.shape)
-
-  # --- Built-in evaluation
-
-  print('\n--KERAS EVALUATION ON GENERATOR\n')
-  evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
-  
-  print('TOTAL LOSS \t\t', evaluate_metrics['loss'])
-  
-  for metric in ['loss', 'mse', 'r2']:
-    current = []
-    for var in general_utils.variables_names[:4]:
-      metric_name = '{}_{}'.format(var, metric)
-      if metric_name in evaluate_metrics:
-        current.append(evaluate_metrics[metric_name])
-
-    values = ' '.join(['{:.08f}'.format(value) for value in current])
-    print('[x, y, z, w] {} \t [{}]'.format(metric.upper(), values))
   
   # --- Custom evaluation
+
+  # print('\n--SKLEARN EVALUATION\n')
   
-  print('\n--SKLEARN EVALUATION\n')
   pred = model.predict(generator_test)
   pred = np.squeeze(np.array(pred))
   y_transposed = np.transpose(data_y) # required in the shape (n_samples, n_outputs)
@@ -829,5 +774,22 @@ def network_evaluate(model, data_files, input_size, batch_size, regression, clas
   print('[x, y, z, w] MSE \t', mean_squared_error(y_transposed, p_transposed, multioutput='raw_values'))
   print('[x, y, z, w] RMSE \t', np.sqrt(mean_squared_error(y_transposed, p_transposed, multioutput='raw_values')))
   print('[x, y, z, w] R2 \t', r2_score(y_transposed, p_transposed, multioutput='raw_values'))
+  
+  # # --- Built-in evaluation
+
+  # print('\n--KERAS EVALUATION ON GENERATOR\n')
+  # evaluate_metrics = model.evaluate(generator_test, verbose=0, return_dict=True)
+  
+  # print('TOTAL LOSS \t\t', evaluate_metrics['loss'])
+  
+  # for metric in ['loss', 'mse', 'r2']:
+  #   current = []
+  #   for var in general_utils.variables_names[:4]:
+  #     metric_name = '{}_{}'.format(var, metric)
+  #     if metric_name in evaluate_metrics:
+  #       current.append(evaluate_metrics[metric_name])
+
+  #   values = ' '.join(['{:.08f}'.format(value) for value in current])
+  #   print('[x, y, z, w] {} \t [{}]'.format(metric.upper(), values))
 
   
