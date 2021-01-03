@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import sklearn as sk
 import sklearn.metrics
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 import cv2
 from PIL import Image
@@ -171,9 +172,9 @@ def network_create(input_size, regression, classification, initial_weights = Non
         # for each variable, the respective model only contains the associated variable (so the other outputs will be missing)
         print(layer_name, 'layer not found, skipping')
         continue
-    print('Restored network initial weights.\n')
+    print('Restored network initial weights.')
   else:
-    print('Network initialized with random weights.\n')
+    print('Network initialized with random weights.')
 
   # --- Set trainable layers
 
@@ -464,6 +465,8 @@ def tfdata_generator(files, input_size, batch_size, backgrounds, bg_smoothmask, 
                      prefetch=True, parallelize=True, deterministic=False, cache=False, repeat=1):
 
   map_parallel = tf.data.experimental.AUTOTUNE if parallelize else None
+  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
+  noises = tf.convert_to_tensor(noises) # saves time during training
 
   gen = tf.data.Dataset.from_tensor_slices(files)
   gen = gen.map(lambda filename: map_parse_input(filename, input_size), map_parallel, deterministic)
@@ -569,9 +572,6 @@ def network_train_generator(model, input_size, data_files,
   from sklearn.model_selection import train_test_split
   data_files_train, data_files_valid = train_test_split(data_files, test_size=validation_split, 
                                                         shuffle=validation_shuffle, random_state=1) # TODO remove seed
-
-  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
-  noises = tf.convert_to_tensor(noises) # saves time during training
 
   generator_train = tfdata_generator(data_files_train, input_size, batch_size,
                                      backgrounds, bg_smoothmask, aug_prob, noises, 
@@ -735,20 +735,9 @@ def network_stats(history, regression, classification, view, save, save_folder =
 
 
 
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
-def network_evaluate(model, data_files, input_size, batch_size, regression, classification, 
-                     backgrounds=[], bg_smoothmask=False, aug_prob=0, noises=[]):
-  
-  # --- Data
-
-  backgrounds = tf.convert_to_tensor(backgrounds) # saves time during training
-
-  generator_test = tfdata_generator(data_files, input_size, batch_size,
-                                    backgrounds, bg_smoothmask, aug_prob, noises, 
-                                    deterministic=True, cache=True, repeat=1)
-
-  data = np.array(list(generator_test.as_numpy_iterator()), dtype=object)
+def get_dataset_from_tfdata_gen(generator):
+  data = np.array(list(generator.as_numpy_iterator()), dtype=object)
   data_x = np.vstack(data[:,0][:])
   y = np.vstack(data[:,1])
   yx = np.hstack([batch[0]['x_pred'] for batch in y])
@@ -756,8 +745,22 @@ def network_evaluate(model, data_files, input_size, batch_size, regression, clas
   yz = np.hstack([batch[0]['z_pred'] for batch in y])
   yw = np.hstack([batch[0]['yaw_pred'] for batch in y])
   data_y = np.array([yx, yy, yz, yw])
+  # TODO missing classifications
   # print('data_x shape', data_x.shape)
   # print('data_y shape', data_y.shape)
+  return data_x, data_y
+
+
+def network_evaluate(model, data_files, input_size, batch_size, regression, classification, 
+                     backgrounds=[], bg_smoothmask=False, aug_prob=0, noises=[]):
+  
+  # --- Data
+
+  generator_test = tfdata_generator(data_files, input_size, batch_size,
+                                    backgrounds, bg_smoothmask, aug_prob, noises, 
+                                    deterministic=True, cache=True, repeat=1)
+
+  data_x, data_y = get_dataset_from_tfdata_gen(generator_test)
   
   # --- Custom evaluation
 

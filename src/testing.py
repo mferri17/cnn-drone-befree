@@ -134,8 +134,8 @@ def get_args():
 
   parser = argparse.ArgumentParser(description='Test given models on given test sets using given backgrounds for replacement.')
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
-  parser.add_argument("--model_paths", nargs="+", type=file_path, default=[])
-  parser.add_argument("--data_folders", nargs="+", type=dir_path, default=[])
+  parser.add_argument("--model_paths", nargs="+", type=file_path, default=[], metavar='MP')
+  parser.add_argument("--data_folders", nargs="+", type=dir_path, default=[], metavar='DF')
   # parser.add_argument('-r', '--regression', action='store_true', help='specify the argument if you want to perform regression')
   # parser.add_argument('-c', '--classification', action='store_true', help='specify the argument if you want to perform classification')
   parser.add_argument('--batch_size', type=int, default=default_batch_size, metavar='BS', help='training batch size (default = {})'.format(default_batch_size))

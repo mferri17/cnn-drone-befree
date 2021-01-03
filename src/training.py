@@ -93,12 +93,12 @@ def train_with_generator(data_folder, network_weights_path, data_len,
 
     # --- Naming
 
+    time_str = time.strftime("%Y%m%d_%H%M%S")
     backgrounds_str = '_{}(len{}{})'.format(backgrounds_name or 'bg', len(backgrounds), ',smooth' if bg_smoothmask else '')
     augmentation_str = '_augm{}{}'.format(str(augmentation_prob).replace('.',''), '(noise)' if len(noises) > 0 else '')
 
-    timestr = time.strftime("%Y%m%d_%H%M%S")
     model_name = '{0} {1} - {2}{3}_len{4}_b{5}_{6}w_{7}{8}{9}_ep{10}'.format(
-        timestr,                                                                          # 0
+        time_str,                                                                          # 0
         socket.gethostname().replace('.','_'),                                            # 1
         'regr' if regression else '',                                                     # 2 optional
         'class' if classification else '',                                                # 3 optional
