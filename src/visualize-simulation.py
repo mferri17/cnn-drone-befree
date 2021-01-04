@@ -73,6 +73,7 @@ v2_color = (255, 0, 0)
 v3_color = (0, 0, 255)
 
 
+
 def triangle_pointer(img, p, rotation, color_):
     # width = 520
     width = 640
@@ -95,9 +96,7 @@ def triangle_pointer(img, p, rotation, color_):
     try:
       img[p[1] - 20:p[1] + 20, p[0] - 20:p[0] + 20] = rotated.astype(np.uint8)
     except:
-      pass # some values for W are out of scale, so they produces errors
-
-
+      pass # some values for W (yaw) are out of scale, so they produces errors
 
 def square_pointer(img, p, color_, w=640, h=480):
     width = w
@@ -115,19 +114,21 @@ def draw_line_datapoint(img, value, graph, model, frame_vert_dim, frame_horiz_di
     center_x = 320
     center_y = 240
     bar_width = 30
+
+    # GT + models specs
     if model == '0':
         color_ = gt_color
-    elif model == '1':  # lix_x SX
+    elif model == '1':
         color_ = v1_color
     elif model == '2':
         color_ = v2_color
     elif model == '3':
         color_ = v3_color
-    else:
-        color_ = (0, 0, 100)
+
+    # variables specs
     if graph == 1:  # lin x SX
         p_x = int(center_x - bar_width - frame_horiz_dim / 2)
-        p_y = int(center_y + frame_vert_dim / 2 * ((-value-1.5) * 1.5))
+        p_y = int(center_y + frame_vert_dim / 2 * ((value-1.5) * 1.5))
         if model == '0':
             # triangle_pointer(img, (p_x, p_y), delta_rot, color_)
             pass
@@ -153,7 +154,7 @@ def draw_line_datapoint(img, value, graph, model, frame_vert_dim, frame_horiz_di
             cv2.line(img, (p_x, p_y), (p_x - 30, p_y), color_, thickness=2)
             # square_pointer(img, (p_x - 5 - (10 * (int(model) - 1)), p_y), color_)
     elif graph == 4:  # ang z
-        p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))  # TODO Dario: maybe revers direction
+        p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))  # TODO Dario: maybe revers direction
         p_y = int(center_y - bar_width - frame_vert_dim / 2)
         if model == '0':
             # triangle_pointer(img, (p_x, p_y), -90 + delta_rot, color_)
@@ -169,10 +170,12 @@ def draw_pointer(img, value, graph, model, frame_vert_dim, frame_horiz_dim, c_x=
     center_x = c_x
     center_y = c_y
     bar_width = 30
+
+    # GT + models specs
     if model == '0':
         color_ = gt_color
         delta_rot = 0
-    elif model == '1':  # lix_x SX
+    elif model == '1':
         color_ = v1_color
         delta_rot = 0
     elif model == '2':
@@ -181,12 +184,11 @@ def draw_pointer(img, value, graph, model, frame_vert_dim, frame_horiz_dim, c_x=
     elif model == '3':
         color_ = v3_color
         delta_rot = 0
-    else:
-        color_ = (0, 0, 100)
-        delta_rot = 0
+
+    # variables specs
     if graph == 1:  # lin x SX
         p_x = int(center_x - bar_width - frame_horiz_dim / 2)
-        p_y = int(center_y + frame_vert_dim / 2 * ((-value-1.5) * 1.5))
+        p_y = int(center_y + frame_vert_dim / 2 * ((value-1.5) * 1.5))
         if model == '0':
             triangle_pointer(img, [p_x, p_y], delta_rot, color_)
         else:
@@ -209,7 +211,7 @@ def draw_pointer(img, value, graph, model, frame_vert_dim, frame_horiz_dim, c_x=
             # cv2.line(img, (p_x, p_y), (p_x - 30, p_y), color_, thickness=2)
             square_pointer(img, [p_x - 5 - (10 * (int(model) - 1)), p_y], color_, w=width, h=height)
     elif graph == 4:  # ang z
-        p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))
+        p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))
         p_y = int(center_y - bar_width - frame_vert_dim / 2)
         if model == '0':
             triangle_pointer(img, [p_x, p_y], -90 + delta_rot, color_)
@@ -263,11 +265,6 @@ def video_multi_predictions(path, images, actuals, predictions):
     
     frame = cv2.cvtColor(cv2.resize(frame, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_NEAREST), cv2.COLOR_RGB2BGR)
 
-    v1_pred = predictions[0][:,i]
-    v2_pred = predictions[1][:,i]
-    v3_pred = predictions[2][:,i]
-    y = actuals[:,i]
-    # velocity = self.velocities[i]
 
     # data_area = (np.ones((330, 520, 3)) * 255).astype(np.uint8)
     data_area = (np.ones((480, 640, 3)) * 255).astype(np.uint8)
@@ -282,55 +279,21 @@ def video_multi_predictions(path, images, actuals, predictions):
     y_offset = int(center_point_y - frame.shape[0] / 2)
     im_final = data_area
 
-    # --- GT 
-
-    draw_pointer(im_final, -y[0], 1, '0', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, -y[1], 2, '0', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, y[2], 3, '0', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, y[3], 4, '0', frame.shape[0], frame.shape[1])
-
-    # --- Middle lines 
+    # --- Variables scales origins 
 
     cv2.line(im_final, (int(center_point_x - frame.shape[1] / 2), center_point_y), (int(center_point_x - frame.shape[1] / 2 - 30), center_point_y), black_color, thickness=1)
     cv2.line(im_final, (int(center_point_x + frame.shape[1] / 2), center_point_y), (int(center_point_x + frame.shape[1] / 2 + 30), center_point_y), black_color, thickness=1)
     cv2.line(im_final, (center_point_x, int(center_point_y - frame.shape[0] / 2)), (center_point_x, int(center_point_y - frame.shape[0] / 2 - 30)), black_color, thickness=1)
     cv2.line(im_final, (center_point_x, int(center_point_y + frame.shape[0] / 2)), (center_point_x, int(center_point_y + frame.shape[0] / 2 + 30)), black_color, thickness=1)
 
-    # --- Variables lines (x, y, z, w) 
-    
-    draw_line_datapoint(im_final, -v1_pred[0], 1, '1', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, -v2_pred[0], 1, '2', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, -v3_pred[0], 1, '3', frame.shape[0], frame.shape[1])
+    # --- Values for each model and variable
 
-    draw_line_datapoint(im_final, -v1_pred[1], 2, '1', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, -v2_pred[1], 2, '2', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, -v3_pred[1], 2, '3', frame.shape[0], frame.shape[1])
-
-    draw_line_datapoint(im_final, v1_pred[2], 3, '1', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, v2_pred[2], 3, '2', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, v3_pred[2], 3, '3', frame.shape[0], frame.shape[1])
-
-    draw_line_datapoint(im_final, v1_pred[3], 4, '1', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, v2_pred[3], 4, '2', frame.shape[0], frame.shape[1])
-    draw_line_datapoint(im_final, v3_pred[3], 4, '3', frame.shape[0], frame.shape[1])
-
-    # --- Variables pointers (x, y, z, w) 
-
-    draw_pointer(im_final, -v1_pred[0], 1, '1', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, -v2_pred[0], 1, '2', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, -v3_pred[0], 1, '3', frame.shape[0], frame.shape[1])
-
-    draw_pointer(im_final, -v1_pred[1], 2, '1', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, -v2_pred[1], 2, '2', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, -v3_pred[1], 2, '3', frame.shape[0], frame.shape[1])
-
-    draw_pointer(im_final, v1_pred[2], 3, '1', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, v2_pred[2], 3, '2', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, v3_pred[2], 3, '3', frame.shape[0], frame.shape[1])
-
-    draw_pointer(im_final, v1_pred[3], 4, '1', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, v2_pred[3], 4, '2', frame.shape[0], frame.shape[1])
-    draw_pointer(im_final, v3_pred[3], 4, '3', frame.shape[0], frame.shape[1])
+    for var in range(4): # for each variable
+        draw_pointer(im_final, actuals[var,i], var+1, '0', frame.shape[0], frame.shape[1]) # GT
+        
+        for mod in range(3): # for each model
+            draw_pointer(im_final, predictions[mod][var,i], var+1, str(mod+1), frame.shape[0], frame.shape[1])
+            draw_line_datapoint(im_final, predictions[mod][var,i], var+1, str(mod+1), frame.shape[0], frame.shape[1])
 
     # --- Borders
 
@@ -372,6 +335,9 @@ def video_multi_predictions(path, images, actuals, predictions):
     cv2.putText(crop_img, 'W', (450, 35), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
     
     # --- Result
+    plt.imshow(crop_img)
+    plt.show()
+    exit()
     video_writer.write(crop_img)
 
   video_writer.release()
@@ -432,29 +398,35 @@ def simulate_flight(models_paths, models_name,
     bgs_name = os.path.split(os.path.dirname(bgs_folder))[1] if bgs_folder is not None else 'bg'
     backgrounds_str = '_{}'.format(bgs_name or 'bg') if bgs_folder is not None else ''
 
-    save_name = '{0} {1} - {2}_{3}{4}'.format(
+    # save_name = '{0} {1} - {2}_{3}{4}'.format(
+    #     time_str,                                             # 0
+    #     socket.gethostname().replace('.','_'),                # 1
+    #     models_name,                                          # 2
+    #     data_str,                                             # 3
+    #     backgrounds_str if len(backgrounds) > 0 else '',      # 4
+    # )
+
+    save_name = '{0} - {1}{2}'.format(
         time_str,                                             # 0
-        socket.gethostname().replace('.','_'),                # 1
-        models_name,                                          # 2
-        data_str,                                             # 3
-        backgrounds_str if len(backgrounds) > 0 else '',      # 4
+        data_str,                                             # 1
+        backgrounds_str if len(backgrounds) > 0 else '',      # 2
     )
 
     # --- Computation
 
-    predictions = []
-    for i, model in enumerate(models):
-      print('Computing predictions for model {} ...'.format(models_names[i]))
-      pred = model.predict(data_generator)
-      pred = np.squeeze(np.array(pred))
-      predictions.append(pred)
-    print('Predictions completed.\n')
-    # np.save('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy', predictions)
-    # exit()
-    
-    # # TODO fix making runtime predictions
-    # predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
-    # print('Predictions loaded.\n')
+    # predictions = []
+    # for i, model in enumerate(models):
+    #   print('Computing predictions for model {} ...'.format(models_names[i]))
+    #   pred = model.predict(data_generator)
+    #   pred = np.squeeze(np.array(pred))
+    #   predictions.append(pred)
+    # print('Predictions completed.\n')
+
+    # TODO fix making runtime predictions
+    # # np.save('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy', predictions)
+    # # exit()
+    predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
+    print('Predictions loaded.\n')
 
     save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
     images = (255 - data_x).astype(np.uint8)
