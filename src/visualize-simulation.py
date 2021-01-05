@@ -66,19 +66,9 @@ from functions import network_utils
 ######
 
 
-# BGR
-gt_color = (0, 0, 0)
-v1_color = (0, 255, 0)
-v2_color = (255, 0, 0)
-v3_color = (0, 0, 255)
-
-
-
 def triangle_pointer(img, p, rotation, color_):
-    # width = 520
-    width = 640
-    # height = 330
-    height = 480
+    width = 640 # 520
+    height = 480 # 330
     if p[0] >= width:
         p[0] = width - 40
     if p[1] >= height:
@@ -99,130 +89,74 @@ def triangle_pointer(img, p, rotation, color_):
       pass # some values for W (yaw) are out of scale, so they produces errors
 
 def square_pointer(img, p, color_, w=640, h=480):
-    width = w
-    height = h
-    p[0] = max(width - 10 if p[0] >= width-5 else p[0], 10)
-    p[1] = max(height - 10 if p[1] >= height-5 else p[1], 10)
     point_im = np.ones((10, 10, 3)) * 255
     p_1 = (0, 0)
     p_2 = (10, 10)
     cv2.rectangle(point_im, p_1, p_2, color=color_, thickness=-1)
-    img[p[1] - 5:p[1] + 5, p[0] - 5:p[0] + 5] = point_im.astype(np.uint8)
-
-
-def draw_line_datapoint(img, value, variable, model, frame_vert_dim, frame_horiz_dim):
-    center_x = 320
-    center_y = 240
-    bar_width = 30
-
-    # GT + models specs
-    if model == -1:
-        color_ = gt_color
-    elif model == 0:
-        color_ = v1_color
-    elif model == 1:
-        color_ = v2_color
-    elif model == 2:
-        color_ = v3_color
-
-    # variables specs
-    if variable == 'x':
-        p_x = int(center_x - bar_width - frame_horiz_dim / 2)
-        p_y = int(center_y + frame_vert_dim / 2 * ((value-1.5) * 1.5))
-        if model == -1:
-            # triangle_pointer(img, (p_x, p_y), delta_rot, color_)
-            pass
-        else:
-            cv2.line(img, (p_x, p_y), (p_x + 30, p_y), color_, thickness=2)
-            # square_pointer(img, (p_x + 5 + (10 * (int(model) - 1)), p_y), color_)
-    elif variable == 'y':
-        p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))
-        p_y = int(center_y + bar_width + frame_vert_dim / 2)
-        if model == -1:
-            # triangle_pointer(img, (p_x, p_y), 90 + delta_rot, color_)
-            pass
-        else:
-            cv2.line(img, (p_x, p_y), (p_x, p_y - 30), color_, thickness=2)
-            # square_pointer(img, (p_x, p_y - 5 - (10 * (int(model) - 1))), color_)
-    elif variable == 'z':
-        p_x = int(center_x + bar_width + frame_horiz_dim / 2)
-        p_y = int(center_y + frame_vert_dim / 2 * (-value * 1.5))
-        if model == -1:
-            # triangle_pointer(img, (p_x, p_y), delta_rot - 180, color_)
-            pass
-        else:
-            cv2.line(img, (p_x, p_y), (p_x - 30, p_y), color_, thickness=2)
-            # square_pointer(img, (p_x - 5 - (10 * (int(model) - 1)), p_y), color_)
-    elif variable == 'w':
-        p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))  # TODO Dario: maybe revers direction
-        p_y = int(center_y - bar_width - frame_vert_dim / 2)
-        if model == -1:
-            # triangle_pointer(img, (p_x, p_y), -90 + delta_rot, color_)
-            pass
-        else:
-            cv2.line(img, (p_x, p_y), (p_x, p_y + 30), color_, thickness=2)
-            # square_pointer(img, (p_x, p_y + 5 + (10 * (int(model) - 1))), color_)
-    else:
-        return None
+    p[0] = max(w - 10 if p[0] >= w-5 else p[0], 10)
+    p[1] = max(h - 10 if p[1] >= h-5 else p[1], 10)
+    img[p[1]-5 : p[1]+5, p[0]-5 : p[0]+5] = point_im.astype(np.uint8)
 
 
 def draw_pointer(img, value, variable, model, frame_vert_dim, frame_horiz_dim, c_x=320, c_y=240, width=640, height=480):
-    center_x = c_x
-    center_y = c_y
-    bar_width = 30
+  center_x = c_x
+  center_y = c_y
+  bar_width = 30
 
-    # GT + models specs
-    if model == -1:
-        color_ = gt_color
-        delta_rot = 0
-    elif model == 0:
-        color_ = v1_color
-        delta_rot = 0
-    elif model == 1:
-        color_ = v2_color
-        delta_rot = 0
-    elif model == 2:
-        color_ = v3_color
-        delta_rot = 0
+  # GT + models specs
+  if model == -1: # GT
+    color_ = (0, 0, 0)    # black
+  elif model == 0:
+    color_ = (0, 255, 0)  # green
+  elif model == 1:
+    color_ = (255, 0, 0)  # blue
+  elif model == 2:
+    color_ = (0, 0, 255)  # red
+  else:
+    raise ValueError('Parameter `model` is not valid.')
 
-    # variables specs
-    if variable == 'x':
-        p_x = int(center_x - bar_width - frame_horiz_dim / 2)
-        p_y = int(center_y + frame_vert_dim / 2 * ((value-1.5) * 1.5))
-        if model == -1:
-            triangle_pointer(img, [p_x, p_y], delta_rot, color_)
-        else:
-            # cv2.line(img, (p_x, p_y), (p_x + 30, p_y), color_, thickness=2)
-            square_pointer(img, [p_x + 5 + (10 * model), p_y], color_, w=width, h=height)
-    elif variable == 'y':
-        p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))
-        p_y = int(center_y + bar_width + frame_vert_dim / 2)
-        if model == -1:
-            triangle_pointer(img, [p_x, p_y], 90 + delta_rot, color_)
-        else:
-            # cv2.line(img, (p_x, p_y), (p_x, p_y - 30), color_, thickness=2)
-            square_pointer(img, [p_x, p_y - 5 - (10 * model)], color_, w=width, h=height)
-    elif variable == 'z':
-        p_x = int(center_x + bar_width + frame_horiz_dim / 2)
-        p_y = int(center_y + frame_vert_dim / 2 * (-value * 1.5))
-        if model == -1:
-            triangle_pointer(img, [p_x, p_y], delta_rot - 180, color_)
-        else:
-            # cv2.line(img, (p_x, p_y), (p_x - 30, p_y), color_, thickness=2)
-            square_pointer(img, [p_x - 5 - (10 * model), p_y], color_, w=width, h=height)
-    elif variable == 'w':
-        p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))
-        p_y = int(center_y - bar_width - frame_vert_dim / 2)
-        if model == -1:
-            triangle_pointer(img, [p_x, p_y], -90 + delta_rot, color_)
-        else:
-            # cv2.line(img, (p_x, p_y), (p_x, p_y + 30), color_, thickness=2)
-            square_pointer(img, [p_x, p_y + 5 + (10 * model)], color_, w=width, h=height)
-    else:
-        return None
+  # variables specs
+  if variable == 'x': # left
+    p_x = int(center_x - bar_width - frame_horiz_dim / 2)
+    p_y = int(center_y + frame_vert_dim / 2 * ((-value+1.5) * 1.5))
+    pt = [p_x, p_y]
+    rot = 0
+    pl = [(p_x, p_y), (p_x + 30, p_y)]
+    ps = [p_x + 5 + (10 * model), p_y]
+  elif variable == 'y': # bottom
+    p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))
+    p_y = int(center_y + bar_width + frame_vert_dim / 2)
+    pt = [p_x, p_y]
+    rot = 90
+    pl = [(p_x, p_y), (p_x, p_y - 30)]
+    ps = [p_x, p_y - 5 - (10 * model)]
+  elif variable == 'z': # right
+    p_x = int(center_x + bar_width + frame_horiz_dim / 2)
+    p_y = int(center_y + frame_vert_dim / 2 * (-value * 1.5))
+    pt = [p_x, p_y]
+    rot = -180
+    pl = [(p_x, p_y), (p_x - 30, p_y)]
+    ps = [p_x - 5 - (10 * model), p_y]
+  elif variable == 'w': # top
+    p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))
+    p_y = int(center_y - bar_width - frame_vert_dim / 2)
+    pt = [p_x, p_y]
+    rot = -90
+    pl = [(p_x, p_y), (p_x, p_y + 30)]
+    ps = [p_x, p_y + 5 + (10 * model)]
+  else:
+    raise ValueError('Parameter `variable` is not valid.')
+  
+  if model == -1:
+    triangle_pointer(img, pt, rot, color_)
+  else:
+    cv2.line(img, pl[0], pl[1], color_, thickness=2)
+    square_pointer(img, ps, color_, w=width, h=height)
 
+    
 ################################
  
+
 def video_simple(path, images):
   video_width = 518
   video_height = 326
@@ -249,100 +183,99 @@ def video_simple(path, images):
   video_writer.release()
 
 
-def video_multi_predictions(path, images, actuals, predictions):
-  video_width = 518
-  video_height = 326
-  video_fps = 25
+def video_multi_predictions(path, images, actuals, predictions, fps=25):
   legend_x, legend_y = (50, 50)
   legend = cv2.imread('C:/Users/96mar/Desktop/meeting_dario/videos/legend.png') # TODO fix
-  video_writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'XVID'), video_fps, (video_width, video_height))
 
-  color_black = (0, 0, 0)
-  area_height = 480 # 330
-  area_width = 640 # 520
+  # video writer
+
+  details_height = 0
+  video_width, video_height = 518, 326 + details_height
+  video_writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'XVID'), fps, (video_width, video_height))
+
+  # parameters
+
+  color_main = (0, 0, 0)
+  font = cv2.FONT_HERSHEY_DUPLEX
+  area_height = 480
+  area_width = 640
   center_point_x = area_width // 2
   center_point_y = area_height // 2
+  frame_h, frame_w = 240, 432
 
-  # x on the left 
-  # y on the bottom
-  # z on the right
-  # w on the top
+  scale_x_orig = [(int(center_point_x - frame_w / 2), center_point_y), (int(center_point_x - frame_w / 2 - 30), center_point_y)]
+  scale_y_orig = [(center_point_x, int(center_point_y + frame_h / 2)), (center_point_x, int(center_point_y + frame_h / 2 + 30))]
+  scale_z_orig = [(int(center_point_x + frame_w / 2), center_point_y), (int(center_point_x + frame_w / 2 + 30), center_point_y)]
+  scale_w_orig = [(center_point_x, int(center_point_y - frame_h / 2)), (center_point_x, int(center_point_y - frame_h / 2 - 30))]
+
+  border_x = [(int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)), (int(center_point_x - frame_w / 2 - 30), int(center_point_y + frame_h / 2))]
+  border_y = [(int(center_point_x - frame_w / 2), int(center_point_y + frame_h / 2)), (int(center_point_x + frame_w / 2), int(center_point_y + frame_h / 2 + 30))]
+  border_z = [(int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2)), (int(center_point_x + frame_w / 2 + 30), int(center_point_y + frame_h / 2))]
+  border_w = [(int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)), (int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2 - 30))]
+  
+  # creation
+
   for frame_idx, frame in enumerate(images):
-    
-    frame = cv2.cvtColor(cv2.resize(frame, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_NEAREST), cv2.COLOR_RGB2BGR)
-    frame_h, frame_w, _ = frame.shape
 
-    x_offset = int(center_point_x - frame_w / 2)
-    y_offset = int(center_point_y - frame_h / 2)
+    frame = cv2.cvtColor(cv2.resize(frame, (frame_w, frame_h), interpolation=cv2.INTER_NEAREST), cv2.COLOR_RGB2BGR)
+    im_final = (np.ones((area_height + details_height, area_width, 3)) * 255).astype(np.uint8) # bigger for allowing out of space predictions?
 
-    data_area = (np.ones((area_height, area_width, 3)) * 255).astype(np.uint8)
-    
-
-    im_final = data_area
-
-    # --- Values for each model and variable
+    # --- GT and predictions pointers for each model and variable
 
     for var_idx, var in enumerate(['x', 'y', 'z', 'w']): # for each variable
       draw_pointer(im_final, actuals[var_idx,frame_idx], var, -1, frame_h, frame_w) # GT
       for model_idx in range(3): # for each model
         draw_pointer(im_final, predictions[model_idx][var_idx,frame_idx], var, model_idx, frame_h, frame_w)
-        draw_line_datapoint(im_final, predictions[model_idx][var_idx,frame_idx], var, model_idx, frame_h, frame_w)
 
-    # --- Variables scales origins 
+    # --- Common graphics 
 
-    cv2.line(im_final, (int(center_point_x - frame_w / 2), center_point_y), (int(center_point_x - frame_w / 2 - 30), center_point_y), color_black, thickness=1)
-    cv2.line(im_final, (int(center_point_x + frame_w / 2), center_point_y), (int(center_point_x + frame_w / 2 + 30), center_point_y), color_black, thickness=1)
-    cv2.line(im_final, (center_point_x, int(center_point_y - frame_h / 2)), (center_point_x, int(center_point_y - frame_h / 2 - 30)), color_black, thickness=1)
-    cv2.line(im_final, (center_point_x, int(center_point_y + frame_h / 2)), (center_point_x, int(center_point_y + frame_h / 2 + 30)), color_black, thickness=1)
+    # Scales origins
+    cv2.line(im_final, scale_x_orig[0], scale_x_orig[1], color_main, thickness=1)
+    cv2.line(im_final, scale_y_orig[0], scale_y_orig[1], color_main, thickness=1)
+    cv2.line(im_final, scale_z_orig[0], scale_z_orig[1], color_main, thickness=1)
+    cv2.line(im_final, scale_w_orig[0], scale_w_orig[1], color_main, thickness=1)
 
-    # --- Borders
+    # Borders
+    cv2.rectangle(im_final, border_x[0], border_x[1], color_main, thickness=1)
+    cv2.rectangle(im_final, border_y[0], border_y[1], color_main, thickness=1)
+    cv2.rectangle(im_final, border_z[0], border_z[1], color_main, thickness=1)
+    cv2.rectangle(im_final, border_w[0], border_w[1], color_main, thickness=1)
 
-    cv2.rectangle(im_final,
-                  (int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)),
-                  (int(center_point_x - frame_w / 2 - 30), int(center_point_y + frame_h / 2)),
-                  color_black, thickness=1)
-    cv2.rectangle(im_final,
-                  (int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2)),
-                  (int(center_point_x + frame_w / 2 + 30), int(center_point_y + frame_h / 2)),
-                  color_black, thickness=1)
-
-    cv2.rectangle(im_final,
-                  (int(center_point_x - frame_w / 2), int(center_point_y + frame_h / 2)),
-                  (int(center_point_x + frame_w / 2), int(center_point_y + frame_h / 2 + 30)),
-                  color_black, thickness=1)
-    cv2.rectangle(im_final,
-                  (int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)),
-                  (int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2 - 30)),
-                  color_black, thickness=1)
-
-    # draw_speed_square(im_final, velocity[0], velocity[1], frame_h, frame_w)
-                  
-    # --- Image + crop
-
-    data_area[y_offset:y_offset + frame_h, x_offset:x_offset + frame_w] = frame
+    # Set image
+    x_offset = int(center_point_x - frame_w / 2)
+    y_offset = int(center_point_y - frame_h / 2)
+    im_final[y_offset : y_offset+frame_h, x_offset : x_offset+frame_w] = frame
     
+    # Crop
     margin_h = int(center_point_y - 327 // 2)
     margin_w = int(center_point_x - 519 // 2)
     crop_img = im_final[margin_h:-margin_h, margin_w:-margin_w]
-    
-    # --- Legend
 
-    cv2.putText(crop_img, '{:05}'.format(frame_idx), (0, 10), cv2.FONT_HERSHEY_DUPLEX, 0.3, (0,0,0), 1, cv2.LINE_AA) # frame number
+    # Legend
+    cv2.putText(crop_img, '{:05}'.format(frame_idx), (5, 10), font, 0.3, color_main, 1, cv2.LINE_AA) # frame number
     crop_img[legend_x:legend_x+legend.shape[0], legend_y:legend_y+legend.shape[1]] = legend # models legend
-    cv2.putText(crop_img, 'X', (20, 65), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
-    cv2.putText(crop_img, 'Y', (60, 305), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
-    cv2.putText(crop_img, 'Z', (480, 270), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
-    cv2.putText(crop_img, 'W', (450, 35), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
+    cv2.putText(crop_img, 'X', (20, 65), font, 0.5, color_main, 1, cv2.LINE_AA)
+    cv2.putText(crop_img, 'Y', (60, 305), font, 0.5, color_main, 1, cv2.LINE_AA)
+    cv2.putText(crop_img, 'Z', (480, 270), font, 0.5, color_main, 1, cv2.LINE_AA)
+    cv2.putText(crop_img, 'W', (450, 35), font, 0.5, color_main, 1, cv2.LINE_AA)
     
+    # --- Other details
+
+    if details_height > 0:
+      cv2.putText(crop_img, 'ciao2', (5, 350), font, 0.5, (0,0,0), 1, cv2.LINE_AA)
+
     # --- Result
     # plt.imshow(crop_img)
     # plt.show()
     # exit()
     video_writer.write(crop_img)
 
-  video_writer.release()
+  
+  video_writer.release() # close file video
+
 
 ################################
+
 
 def simulate_flight(models_paths, models_name,
                     data_folder, data_len, bgs_folder, save_folder):
@@ -397,14 +330,6 @@ def simulate_flight(models_paths, models_name,
   data_str = '{}(len{})'.format(data_name.replace('_', ''), len(list_files))
   bgs_name = os.path.split(os.path.dirname(bgs_folder))[1] if bgs_folder is not None else 'bg'
   backgrounds_str = '_{}'.format(bgs_name or 'bg') if bgs_folder is not None else ''
-
-  # save_name = '{0} {1} - {2}_{3}{4}'.format(
-  #     time_str,                                             # 0
-  #     socket.gethostname().replace('.','_'),                # 1
-  #     models_name,                                          # 2
-  #     data_str,                                             # 3
-  #     backgrounds_str if len(backgrounds) > 0 else '',      # 4
-  # )
 
   save_name = '{0} - {1}{2}'.format(
       time_str,                                             # 0
