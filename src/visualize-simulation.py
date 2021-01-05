@@ -59,11 +59,15 @@ from functions import network_utils
 ### GLOBAL VARIABLES
 ######
 
-
+color_models = [(0, 255, 0), (255, 0, 0), (0, 0, 255)]
+color_main = (0, 0, 0)
 
 ################################
 ### FUNCTIONS
 ######
+
+def np_rmse(predictions, targets):
+  return np.sqrt(np.mean((predictions-targets)**2))
 
 
 def triangle_pointer(img, p, rotation, color_):
@@ -105,13 +109,9 @@ def draw_pointer(img, value, variable, model, frame_vert_dim, frame_horiz_dim, c
 
   # GT + models specs
   if model == -1: # GT
-    color_ = (0, 0, 0)    # black
-  elif model == 0:
-    color_ = (0, 255, 0)  # green
-  elif model == 1:
-    color_ = (255, 0, 0)  # blue
-  elif model == 2:
-    color_ = (0, 0, 255)  # red
+    color_ = color_main    # black
+  elif model >= 0 and model <= 2:
+    color_ = color_models[model]
   else:
     raise ValueError('Parameter `model` is not valid.')
 
@@ -138,7 +138,7 @@ def draw_pointer(img, value, variable, model, frame_vert_dim, frame_horiz_dim, c
     pl = [(p_x, p_y), (p_x - 30, p_y)]
     ps = [p_x - 5 - (10 * model), p_y]
   elif variable == 'w': # top
-    p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))
+    p_x = int(center_x + frame_horiz_dim / 2 * (value))
     p_y = int(center_y - bar_width - frame_vert_dim / 2)
     pt = [p_x, p_y]
     rot = -90
@@ -183,19 +183,36 @@ def video_simple(path, images):
   video_writer.release()
 
 
-def video_multi_predictions(path, images, actuals, predictions, fps=25):
-  legend_x, legend_y = (50, 50)
-  legend = cv2.imread('C:/Users/96mar/Desktop/meeting_dario/videos/legend.png') # TODO fix
+def video_multi_predictions(path, images, actuals, predictions, 
+                            fps, legend_path, window_seconds):
 
-  # video writer
+  # Metrics
 
-  details_height = 0
+  details_height = 110 if window_seconds is not None and window_seconds > 0 else 0
+  details_frequency = window_seconds * fps if details_height > 0 else 0
+  
+  preds_variance = None
+  truth_variance = None
+  preds_rmse = None
+  if details_frequency > 0:
+    preds_variance = np.zeros((3, 4)) # 3 models, 4 variables
+    if actuals is not None:
+      truth_variance = np.zeros((4)) # 4 variables
+      preds_rmse = np.zeros((3, 4)) # 3 models, 4 variables
+      details_height *= 2
+
+  # Video writer
+
   video_width, video_height = 518, 326 + details_height
   video_writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'XVID'), fps, (video_width, video_height))
 
-  # parameters
+  # Parameters
+  
+  legend_x, legend_y = (50, 50)
+  legend = 0 # blank legend
+  if legend_path is not None:
+    legend = cv2.imread(legend_path)
 
-  color_main = (0, 0, 0)
   font = cv2.FONT_HERSHEY_DUPLEX
   area_height = 480
   area_width = 640
@@ -213,7 +230,7 @@ def video_multi_predictions(path, images, actuals, predictions, fps=25):
   border_z = [(int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2)), (int(center_point_x + frame_w / 2 + 30), int(center_point_y + frame_h / 2))]
   border_w = [(int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)), (int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2 - 30))]
   
-  # creation
+  # Creation
 
   for frame_idx, frame in enumerate(images):
 
@@ -223,7 +240,9 @@ def video_multi_predictions(path, images, actuals, predictions, fps=25):
     # --- GT and predictions pointers for each model and variable
 
     for var_idx, var in enumerate(['x', 'y', 'z', 'w']): # for each variable
-      draw_pointer(im_final, actuals[var_idx,frame_idx], var, -1, frame_h, frame_w) # GT
+      if actuals is not None:
+        draw_pointer(im_final, actuals[var_idx,frame_idx], var, -1, frame_h, frame_w) # GT
+      
       for model_idx in range(3): # for each model
         draw_pointer(im_final, predictions[model_idx][var_idx,frame_idx], var, model_idx, frame_h, frame_w)
 
@@ -261,8 +280,59 @@ def video_multi_predictions(path, images, actuals, predictions, fps=25):
     
     # --- Other details
 
-    if details_height > 0:
-      cv2.putText(crop_img, 'ciao2', (5, 350), font, 0.5, (0,0,0), 1, cv2.LINE_AA)
+    if details_frequency > 0:
+      
+      # Metrics update
+
+      if frame_idx >= details_frequency and frame_idx % details_frequency == 0: 
+        frames_range = slice(frame_idx-details_frequency, frame_idx) # frames to consider
+        window_truth = actuals[:,frames_range] # shape (4, details_frequency)
+
+        for model_idx in range(3): # for each model
+          window_predictions = predictions[model_idx][:,frames_range] # shape (4, details_frequency)
+          preds_variance[model_idx] = np.array([np.var(var) for var in window_predictions])
+          if preds_rmse is not None: # only if GT is present
+            preds_rmse[model_idx] = np.array([np_rmse(var, window_truth[vi]) for vi, var in enumerate(window_predictions)])
+
+        if truth_variance is not None: # for GT, if present
+          truth_variance = np.array([np.var(var) for var in window_truth])
+
+      # Style
+
+      line_height = 20
+      dx = 10
+      dy = video_height - details_height + 25
+      cv2.putText(crop_img, 'LAST {} SECONDS WINDOW METRICS:'.format(window_seconds), (dx, dy), font, 0.5, color_main, 1, cv2.LINE_AA)
+      dy += line_height + 5
+
+      # Printing
+
+      for model_idx in range(3):
+        values = ', '.join('{:.3f}'.format(v) for v in preds_variance[model_idx])
+        cv2.putText(
+          crop_img, 'M{} [X, Y, Z, W] variance [{}]'.format(model_idx+1, values), 
+          (dx, dy), font, 0.5, color_models[model_idx], 1, cv2.LINE_AA
+        )
+        dy += line_height
+
+      if truth_variance is not None:
+        values = ', '.join('{:.3f}'.format(v) for v in truth_variance)
+        cv2.putText(
+          crop_img, 'GT [X, Y, Z, W] variance [{}]'.format(values), 
+          (dx, dy), font, 0.5, color_main, 1, cv2.LINE_AA
+        )
+        dy += line_height
+
+      # RMSE
+      if preds_rmse is not None:
+        dy += 15
+        for model_idx in range(3):
+          values = ', '.join('{:.3f}'.format(v) for v in preds_rmse[model_idx])
+          cv2.putText(
+            crop_img, 'M{} [X, Y, Z, W] RMSE [{}]'.format(model_idx+1, values), 
+            (dx, dy), font, 0.5, color_models[model_idx], 1, cv2.LINE_AA
+          )
+          dy += line_height
 
     # --- Result
     # plt.imshow(crop_img)
@@ -277,8 +347,9 @@ def video_multi_predictions(path, images, actuals, predictions, fps=25):
 ################################
 
 
-def simulate_flight(models_paths, models_name,
-                    data_folder, data_len, bgs_folder, save_folder):
+def simulate_flight(models_paths, models_name, 
+                    data_folder, data_len, bgs_folder, fps,
+                    legend_path, window_seconds, save_folder):
     
   # --- Parameters
 
@@ -330,35 +401,38 @@ def simulate_flight(models_paths, models_name,
   data_str = '{}(len{})'.format(data_name.replace('_', ''), len(list_files))
   bgs_name = os.path.split(os.path.dirname(bgs_folder))[1] if bgs_folder is not None else 'bg'
   backgrounds_str = '_{}'.format(bgs_name or 'bg') if bgs_folder is not None else ''
+  window_str = '_w{}'.format(window_seconds) if window_seconds is not None and window_seconds > 0 else ''
 
-  save_name = '{0} - {1}{2}'.format(
+  save_name = '{0} - {1}_fps{2}{3}{4}'.format(
       time_str,                                             # 0
       data_str,                                             # 1
-      backgrounds_str if len(backgrounds) > 0 else '',      # 2
+      fps,                                                  # 2
+      window_str,                                           # 3
+      backgrounds_str if len(backgrounds) > 0 else '',      # 4
   )
 
   # --- Computation
 
-  # predictions = []
-  # for i, model in enumerate(models):
-  #   print('Computing predictions for model {} ...'.format(models_names[i]))
-  #   pred = model.predict(data_generator)
-  #   pred = np.squeeze(np.array(pred))
-  #   predictions.append(pred)
-  # print('Predictions completed.\n')
+  predictions = []
+  for i, model in enumerate(models):
+    print('Computing predictions for model {} ...'.format(models_names[i]))
+    pred = model.predict(data_generator)
+    pred = np.squeeze(np.array(pred))
+    predictions.append(pred)
+  print('Predictions completed.\n')
 
   # TODO fix making runtime predictions
   # # np.save('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy', predictions)
   # # exit()
-  predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
-  print('Predictions loaded.\n')
+  # predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
+  # print('Predictions loaded.\n')
 
   save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
   images = (255 - data_x).astype(np.uint8)
   actuals = data_y
 
   print('Making video ...')
-  video_multi_predictions(save_path, images, actuals, predictions)
+  video_multi_predictions(save_path, images, actuals, predictions, fps, legend_path, window_seconds)
   print('Video saved to', save_path)
 
 
@@ -387,11 +461,12 @@ def get_args():
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
   parser.add_argument("--models_paths", nargs="+", type=file_path, default=[], metavar='MP')
   parser.add_argument('--models_name', type=str, metavar='MN', help='name/identifier of the chosen models set')
-  parser.add_argument("--data_folder", type=dir_path)
+  parser.add_argument("--data_folder", type=dir_path, help='folder path of the dataset')
   parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
   parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
-  # parser.add_argument('--bgs_name', type=str, metavar='BGN', help='name/identifier of the chosen backgrounds set, just used for naming purposes')
-  # parser.add_argument('--save', action='store_true', help='specify the argument if you want to save evaluation metrics')
+  parser.add_argument("--fps", type=int, default=25, metavar='FPS', help='video frame per second (default = 25)')
+  parser.add_argument("--legend_path", type=file_path, metavar='LP', help='path to the legend image for the video')
+  parser.add_argument("--window_sec", type=int, metavar='WS', help='window length in seconds for computing additional details (default or < 0 = no additional details)')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save evaluation metrics')
   parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
 
@@ -421,5 +496,6 @@ if __name__ == "__main__":
   simulate_flight(
     args.models_paths, args.models_name, 
     args.data_folder, args.data_len, args.bgs_folder,
+    args.fps, args.legend_path, args.window_sec,
     args.save_folder,
   )
