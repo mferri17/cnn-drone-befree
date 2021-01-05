@@ -110,53 +110,53 @@ def square_pointer(img, p, color_, w=640, h=480):
     img[p[1] - 5:p[1] + 5, p[0] - 5:p[0] + 5] = point_im.astype(np.uint8)
 
 
-def draw_line_datapoint(img, value, graph, model, frame_vert_dim, frame_horiz_dim):
+def draw_line_datapoint(img, value, variable, model, frame_vert_dim, frame_horiz_dim):
     center_x = 320
     center_y = 240
     bar_width = 30
 
     # GT + models specs
-    if model == '0':
+    if model == -1:
         color_ = gt_color
-    elif model == '1':
+    elif model == 0:
         color_ = v1_color
-    elif model == '2':
+    elif model == 1:
         color_ = v2_color
-    elif model == '3':
+    elif model == 2:
         color_ = v3_color
 
     # variables specs
-    if graph == 1:  # lin x SX
+    if variable == 'x':
         p_x = int(center_x - bar_width - frame_horiz_dim / 2)
         p_y = int(center_y + frame_vert_dim / 2 * ((value-1.5) * 1.5))
-        if model == '0':
+        if model == -1:
             # triangle_pointer(img, (p_x, p_y), delta_rot, color_)
             pass
         else:
             cv2.line(img, (p_x, p_y), (p_x + 30, p_y), color_, thickness=2)
             # square_pointer(img, (p_x + 5 + (10 * (int(model) - 1)), p_y), color_)
-    elif graph == 2:  # lin y
+    elif variable == 'y':
         p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))
         p_y = int(center_y + bar_width + frame_vert_dim / 2)
-        if model == '0':
+        if model == -1:
             # triangle_pointer(img, (p_x, p_y), 90 + delta_rot, color_)
             pass
         else:
             cv2.line(img, (p_x, p_y), (p_x, p_y - 30), color_, thickness=2)
             # square_pointer(img, (p_x, p_y - 5 - (10 * (int(model) - 1))), color_)
-    elif graph == 3:  # lin z
+    elif variable == 'z':
         p_x = int(center_x + bar_width + frame_horiz_dim / 2)
         p_y = int(center_y + frame_vert_dim / 2 * (-value * 1.5))
-        if model == '0':
+        if model == -1:
             # triangle_pointer(img, (p_x, p_y), delta_rot - 180, color_)
             pass
         else:
             cv2.line(img, (p_x, p_y), (p_x - 30, p_y), color_, thickness=2)
             # square_pointer(img, (p_x - 5 - (10 * (int(model) - 1)), p_y), color_)
-    elif graph == 4:  # ang z
+    elif variable == 'w':
         p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))  # TODO Dario: maybe revers direction
         p_y = int(center_y - bar_width - frame_vert_dim / 2)
-        if model == '0':
+        if model == -1:
             # triangle_pointer(img, (p_x, p_y), -90 + delta_rot, color_)
             pass
         else:
@@ -166,58 +166,58 @@ def draw_line_datapoint(img, value, graph, model, frame_vert_dim, frame_horiz_di
         return None
 
 
-def draw_pointer(img, value, graph, model, frame_vert_dim, frame_horiz_dim, c_x=320, c_y=240, width=640, height=480):
+def draw_pointer(img, value, variable, model, frame_vert_dim, frame_horiz_dim, c_x=320, c_y=240, width=640, height=480):
     center_x = c_x
     center_y = c_y
     bar_width = 30
 
     # GT + models specs
-    if model == '0':
+    if model == -1:
         color_ = gt_color
         delta_rot = 0
-    elif model == '1':
+    elif model == 0:
         color_ = v1_color
         delta_rot = 0
-    elif model == '2':
+    elif model == 1:
         color_ = v2_color
         delta_rot = 0
-    elif model == '3':
+    elif model == 2:
         color_ = v3_color
         delta_rot = 0
 
     # variables specs
-    if graph == 1:  # lin x SX
+    if variable == 'x':
         p_x = int(center_x - bar_width - frame_horiz_dim / 2)
         p_y = int(center_y + frame_vert_dim / 2 * ((value-1.5) * 1.5))
-        if model == '0':
+        if model == -1:
             triangle_pointer(img, [p_x, p_y], delta_rot, color_)
         else:
             # cv2.line(img, (p_x, p_y), (p_x + 30, p_y), color_, thickness=2)
-            square_pointer(img, [p_x + 5 + (10 * (int(model) - 1)), p_y], color_, w=width, h=height)
-    elif graph == 2:  # lin y
+            square_pointer(img, [p_x + 5 + (10 * model), p_y], color_, w=width, h=height)
+    elif variable == 'y':
         p_x = int(center_x + frame_horiz_dim / 2 * (-value * 1.5))
         p_y = int(center_y + bar_width + frame_vert_dim / 2)
-        if model == '0':
+        if model == -1:
             triangle_pointer(img, [p_x, p_y], 90 + delta_rot, color_)
         else:
             # cv2.line(img, (p_x, p_y), (p_x, p_y - 30), color_, thickness=2)
-            square_pointer(img, [p_x, p_y - 5 - (10 * (int(model) - 1))], color_, w=width, h=height)
-    elif graph == 3:  # lin z
+            square_pointer(img, [p_x, p_y - 5 - (10 * model)], color_, w=width, h=height)
+    elif variable == 'z':
         p_x = int(center_x + bar_width + frame_horiz_dim / 2)
         p_y = int(center_y + frame_vert_dim / 2 * (-value * 1.5))
-        if model == '0':
+        if model == -1:
             triangle_pointer(img, [p_x, p_y], delta_rot - 180, color_)
         else:
             # cv2.line(img, (p_x, p_y), (p_x - 30, p_y), color_, thickness=2)
-            square_pointer(img, [p_x - 5 - (10 * (int(model) - 1)), p_y], color_, w=width, h=height)
-    elif graph == 4:  # ang z
+            square_pointer(img, [p_x - 5 - (10 * model), p_y], color_, w=width, h=height)
+    elif variable == 'w':
         p_x = int(center_x + frame_horiz_dim / 2 * (value * 1.5))
         p_y = int(center_y - bar_width - frame_vert_dim / 2)
-        if model == '0':
+        if model == -1:
             triangle_pointer(img, [p_x, p_y], -90 + delta_rot, color_)
         else:
             # cv2.line(img, (p_x, p_y), (p_x, p_y + 30), color_, thickness=2)
-            square_pointer(img, [p_x, p_y + 5 + (10 * (int(model) - 1))], color_, w=width, h=height)
+            square_pointer(img, [p_x, p_y + 5 + (10 * model)], color_, w=width, h=height)
     else:
         return None
 
@@ -257,69 +257,69 @@ def video_multi_predictions(path, images, actuals, predictions):
   legend = cv2.imread('C:/Users/96mar/Desktop/meeting_dario/videos/legend.png') # TODO fix
   video_writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'XVID'), video_fps, (video_width, video_height))
 
+  color_black = (0, 0, 0)
+  area_height = 480 # 330
+  area_width = 640 # 520
+  center_point_x = area_width // 2
+  center_point_y = area_height // 2
+
   # x on the left 
   # y on the bottom
   # z on the right
   # w on the top
-  for i, frame in enumerate(images):
+  for frame_idx, frame in enumerate(images):
     
     frame = cv2.cvtColor(cv2.resize(frame, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_NEAREST), cv2.COLOR_RGB2BGR)
+    frame_h, frame_w, _ = frame.shape
 
+    x_offset = int(center_point_x - frame_w / 2)
+    y_offset = int(center_point_y - frame_h / 2)
 
-    # data_area = (np.ones((330, 520, 3)) * 255).astype(np.uint8)
-    data_area = (np.ones((480, 640, 3)) * 255).astype(np.uint8)
-    black_color = (0, 0, 0)
+    data_area = (np.ones((area_height, area_width, 3)) * 255).astype(np.uint8)
+    
 
-    center_point_x = 320
-    # center_point_x = int(520/2)
-    center_point_y = 240
-    # center_point_y = int(330/2)
-
-    x_offset = int(center_point_x - frame.shape[1] / 2)
-    y_offset = int(center_point_y - frame.shape[0] / 2)
     im_final = data_area
-
-    # --- Variables scales origins 
-
-    cv2.line(im_final, (int(center_point_x - frame.shape[1] / 2), center_point_y), (int(center_point_x - frame.shape[1] / 2 - 30), center_point_y), black_color, thickness=1)
-    cv2.line(im_final, (int(center_point_x + frame.shape[1] / 2), center_point_y), (int(center_point_x + frame.shape[1] / 2 + 30), center_point_y), black_color, thickness=1)
-    cv2.line(im_final, (center_point_x, int(center_point_y - frame.shape[0] / 2)), (center_point_x, int(center_point_y - frame.shape[0] / 2 - 30)), black_color, thickness=1)
-    cv2.line(im_final, (center_point_x, int(center_point_y + frame.shape[0] / 2)), (center_point_x, int(center_point_y + frame.shape[0] / 2 + 30)), black_color, thickness=1)
 
     # --- Values for each model and variable
 
-    for var in range(4): # for each variable
-        draw_pointer(im_final, actuals[var,i], var+1, '0', frame.shape[0], frame.shape[1]) # GT
-        
-        for mod in range(3): # for each model
-            draw_pointer(im_final, predictions[mod][var,i], var+1, str(mod+1), frame.shape[0], frame.shape[1])
-            draw_line_datapoint(im_final, predictions[mod][var,i], var+1, str(mod+1), frame.shape[0], frame.shape[1])
+    for var_idx, var in enumerate(['x', 'y', 'z', 'w']): # for each variable
+      draw_pointer(im_final, actuals[var_idx,frame_idx], var, -1, frame_h, frame_w) # GT
+      for model_idx in range(3): # for each model
+        draw_pointer(im_final, predictions[model_idx][var_idx,frame_idx], var, model_idx, frame_h, frame_w)
+        draw_line_datapoint(im_final, predictions[model_idx][var_idx,frame_idx], var, model_idx, frame_h, frame_w)
+
+    # --- Variables scales origins 
+
+    cv2.line(im_final, (int(center_point_x - frame_w / 2), center_point_y), (int(center_point_x - frame_w / 2 - 30), center_point_y), color_black, thickness=1)
+    cv2.line(im_final, (int(center_point_x + frame_w / 2), center_point_y), (int(center_point_x + frame_w / 2 + 30), center_point_y), color_black, thickness=1)
+    cv2.line(im_final, (center_point_x, int(center_point_y - frame_h / 2)), (center_point_x, int(center_point_y - frame_h / 2 - 30)), color_black, thickness=1)
+    cv2.line(im_final, (center_point_x, int(center_point_y + frame_h / 2)), (center_point_x, int(center_point_y + frame_h / 2 + 30)), color_black, thickness=1)
 
     # --- Borders
 
     cv2.rectangle(im_final,
-                  (int(center_point_x - frame.shape[1] / 2), int(center_point_y - frame.shape[0] / 2)),
-                  (int(center_point_x - frame.shape[1] / 2 - 30), int(center_point_y + frame.shape[0] / 2)),
-                  black_color, thickness=1)
+                  (int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)),
+                  (int(center_point_x - frame_w / 2 - 30), int(center_point_y + frame_h / 2)),
+                  color_black, thickness=1)
     cv2.rectangle(im_final,
-                  (int(center_point_x + frame.shape[1] / 2), int(center_point_y - frame.shape[0] / 2)),
-                  (int(center_point_x + frame.shape[1] / 2 + 30), int(center_point_y + frame.shape[0] / 2)),
-                  black_color, thickness=1)
+                  (int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2)),
+                  (int(center_point_x + frame_w / 2 + 30), int(center_point_y + frame_h / 2)),
+                  color_black, thickness=1)
 
     cv2.rectangle(im_final,
-                  (int(center_point_x - frame.shape[1] / 2), int(center_point_y + frame.shape[0] / 2)),
-                  (int(center_point_x + frame.shape[1] / 2), int(center_point_y + frame.shape[0] / 2 + 30)),
-                  black_color, thickness=1)
+                  (int(center_point_x - frame_w / 2), int(center_point_y + frame_h / 2)),
+                  (int(center_point_x + frame_w / 2), int(center_point_y + frame_h / 2 + 30)),
+                  color_black, thickness=1)
     cv2.rectangle(im_final,
-                  (int(center_point_x - frame.shape[1] / 2), int(center_point_y - frame.shape[0] / 2)),
-                  (int(center_point_x + frame.shape[1] / 2), int(center_point_y - frame.shape[0] / 2 - 30)),
-                  black_color, thickness=1)
-    
-    # draw_speed_square(im_final, velocity[0], velocity[1], frame.shape[0], frame.shape[1])
+                  (int(center_point_x - frame_w / 2), int(center_point_y - frame_h / 2)),
+                  (int(center_point_x + frame_w / 2), int(center_point_y - frame_h / 2 - 30)),
+                  color_black, thickness=1)
+
+    # draw_speed_square(im_final, velocity[0], velocity[1], frame_h, frame_w)
                   
     # --- Image + crop
 
-    data_area[y_offset:y_offset + frame.shape[0], x_offset:x_offset + frame.shape[1]] = frame
+    data_area[y_offset:y_offset + frame_h, x_offset:x_offset + frame_w] = frame
     
     margin_h = int(center_point_y - 327 // 2)
     margin_w = int(center_point_x - 519 // 2)
@@ -327,7 +327,7 @@ def video_multi_predictions(path, images, actuals, predictions):
     
     # --- Legend
 
-    cv2.putText(crop_img, '{:05}'.format(i), (0, 10), cv2.FONT_HERSHEY_DUPLEX, 0.3, (0,0,0), 1, cv2.LINE_AA) # frame number
+    cv2.putText(crop_img, '{:05}'.format(frame_idx), (0, 10), cv2.FONT_HERSHEY_DUPLEX, 0.3, (0,0,0), 1, cv2.LINE_AA) # frame number
     crop_img[legend_x:legend_x+legend.shape[0], legend_y:legend_y+legend.shape[1]] = legend # models legend
     cv2.putText(crop_img, 'X', (20, 65), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
     cv2.putText(crop_img, 'Y', (60, 305), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
@@ -335,9 +335,9 @@ def video_multi_predictions(path, images, actuals, predictions):
     cv2.putText(crop_img, 'W', (450, 35), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
     
     # --- Result
-    plt.imshow(crop_img)
-    plt.show()
-    exit()
+    # plt.imshow(crop_img)
+    # plt.show()
+    # exit()
     video_writer.write(crop_img)
 
   video_writer.release()
@@ -347,94 +347,94 @@ def video_multi_predictions(path, images, actuals, predictions):
 def simulate_flight(models_paths, models_name,
                     data_folder, data_len, bgs_folder, save_folder):
     
-    # --- Parameters
+  # --- Parameters
 
-    regression = True
-    classification = False
-    bg_smoothmask = True
-    batch_size = 64
+  regression = True
+  classification = False
+  bg_smoothmask = True
+  batch_size = 64
 
-    # Data
+  # Data
 
-    start = 0
-    end = start + data_len if data_len is not None else None
-    list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
-    list_files = list_files[start:end]
+  start = 0
+  end = start + data_len if data_len is not None else None
+  list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
+  list_files = list_files[start:end]
 
-    with open(list_files[0], 'br') as first:
-        input_shape = pickle.load(first)['image'].shape
+  with open(list_files[0], 'br') as first:
+      input_shape = pickle.load(first)['image'].shape
 
-    backgrounds = network_utils.load_backgrounds(bgs_folder, bg_smoothmask)
-    
-    data_generator = network_utils.tfdata_generator(
-      list_files, input_shape, batch_size,
-      backgrounds, bg_smoothmask, 
-      deterministic=True, cache=True, repeat=1
-    )
+  backgrounds = network_utils.load_backgrounds(bgs_folder, bg_smoothmask)
+  
+  data_generator = network_utils.tfdata_generator(
+    list_files, input_shape, batch_size,
+    backgrounds, bg_smoothmask, 
+    deterministic=True, cache=True, repeat=1
+  )
 
-    print('Retrieving ground truth from data...\n')
-    data_x, data_y = network_utils.get_dataset_from_tfdata_gen(data_generator)
-    
-    # Models
+  print('Retrieving ground truth from data...\n')
+  data_x, data_y = network_utils.get_dataset_from_tfdata_gen(data_generator)
+  
+  # Models
 
-    models = []
-    models_names = []
-    for mp in models_paths:
-      _, filename = os.path.split(mp)
-      model_name, _ = os.path.splitext(filename)
-      model = network_utils.network_create(input_shape, regression, classification, retrain_from_layer=0, view_summary=False)
-      model = network_utils.network_compile(model, regression, classification, compute_r2=True)
-      model.load_weights(mp, by_name=True)
-      print('Network weights restored from', model_name)
-      models.append(model)
-      models_names.append(model_name)
-    print('Models loaded.\n')
+  models = []
+  models_names = []
+  for mp in models_paths:
+    _, filename = os.path.split(mp)
+    model_name, _ = os.path.splitext(filename)
+    model = network_utils.network_create(input_shape, regression, classification, retrain_from_layer=0, view_summary=False)
+    model = network_utils.network_compile(model, regression, classification, compute_r2=True)
+    model.load_weights(mp, by_name=True)
+    print('Network weights restored from', model_name)
+    models.append(model)
+    models_names.append(model_name)
+  print('Models loaded.\n')
 
-    # Naming
+  # Naming
 
-    time_str = time.strftime("%Y%m%d_%H%M%S")
-    data_name = os.path.split(os.path.dirname(data_folder))[1]
-    data_str = '{}(len{})'.format(data_name.replace('_', ''), len(list_files))
-    bgs_name = os.path.split(os.path.dirname(bgs_folder))[1] if bgs_folder is not None else 'bg'
-    backgrounds_str = '_{}'.format(bgs_name or 'bg') if bgs_folder is not None else ''
+  time_str = time.strftime("%Y%m%d_%H%M%S")
+  data_name = os.path.split(os.path.dirname(data_folder))[1]
+  data_str = '{}(len{})'.format(data_name.replace('_', ''), len(list_files))
+  bgs_name = os.path.split(os.path.dirname(bgs_folder))[1] if bgs_folder is not None else 'bg'
+  backgrounds_str = '_{}'.format(bgs_name or 'bg') if bgs_folder is not None else ''
 
-    # save_name = '{0} {1} - {2}_{3}{4}'.format(
-    #     time_str,                                             # 0
-    #     socket.gethostname().replace('.','_'),                # 1
-    #     models_name,                                          # 2
-    #     data_str,                                             # 3
-    #     backgrounds_str if len(backgrounds) > 0 else '',      # 4
-    # )
+  # save_name = '{0} {1} - {2}_{3}{4}'.format(
+  #     time_str,                                             # 0
+  #     socket.gethostname().replace('.','_'),                # 1
+  #     models_name,                                          # 2
+  #     data_str,                                             # 3
+  #     backgrounds_str if len(backgrounds) > 0 else '',      # 4
+  # )
 
-    save_name = '{0} - {1}{2}'.format(
-        time_str,                                             # 0
-        data_str,                                             # 1
-        backgrounds_str if len(backgrounds) > 0 else '',      # 2
-    )
+  save_name = '{0} - {1}{2}'.format(
+      time_str,                                             # 0
+      data_str,                                             # 1
+      backgrounds_str if len(backgrounds) > 0 else '',      # 2
+  )
 
-    # --- Computation
+  # --- Computation
 
-    # predictions = []
-    # for i, model in enumerate(models):
-    #   print('Computing predictions for model {} ...'.format(models_names[i]))
-    #   pred = model.predict(data_generator)
-    #   pred = np.squeeze(np.array(pred))
-    #   predictions.append(pred)
-    # print('Predictions completed.\n')
+  # predictions = []
+  # for i, model in enumerate(models):
+  #   print('Computing predictions for model {} ...'.format(models_names[i]))
+  #   pred = model.predict(data_generator)
+  #   pred = np.squeeze(np.array(pred))
+  #   predictions.append(pred)
+  # print('Predictions completed.\n')
 
-    # TODO fix making runtime predictions
-    # # np.save('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy', predictions)
-    # # exit()
-    predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
-    print('Predictions loaded.\n')
+  # TODO fix making runtime predictions
+  # # np.save('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy', predictions)
+  # # exit()
+  predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
+  print('Predictions loaded.\n')
 
-    save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
-    images = (255 - data_x).astype(np.uint8)
-    actuals = data_y
+  save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
+  images = (255 - data_x).astype(np.uint8)
+  actuals = data_y
 
-    print('Making video ...')
-    video_multi_predictions(save_path, images, actuals, predictions)
-    print('Video saved to', save_path)
+  print('Making video ...')
+  video_multi_predictions(save_path, images, actuals, predictions)
+  print('Video saved to', save_path)
 
 
 ################################
