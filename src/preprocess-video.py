@@ -45,30 +45,30 @@ from functions import general_utils
 ### FUNCTIONS
 ######
 
-def img_processing(source_path, source_ext, dest_path, 
-                   img_height, img_width, grayscale, cvt_float = False, 
-                   data_size = None, find_recursive = False):
+def video_processing(video_path, dest_path, frames_count,
+                     img_height, img_width, grayscale):
 
-  images_paths = general_utils.list_files_in_folder(source_path, source_ext, find_recursive)
-  images_paths = images_paths[:data_size]
+  time_str = time.strftime("%Y%m%d_%H%M%S")
+  video_name = general_utils.get_name_file(video_path)
+  save_path = os.path.join(dest_path, 'custom', '{} {}/'.format(time_str, video_name))
+  general_utils.create_folder_if_not_exist(save_path)
   
-  general_utils.create_folder_if_not_exist(dest_path)
+  video_stream = cv2.VideoCapture(video_path) 
+  if frames_count is None:
+    frames_count = int(video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
 
-  errors = []
-  print('Preprocessing {} images to be ({},{},{}) ...'.format(len(images_paths), img_height, img_width, 1 if grayscale else 3))
+  print('Saving to', save_path)
+  print('Preprocessing video to extract images of shape ({},{},{}) ...'.format(img_height, img_width, 1 if grayscale else 3))
   start_time = time.monotonic()
+  i = 0
 
-  for i, path in enumerate(images_paths):
-    try:
-      img = cv2.imread(path).astype('uint8')
-    except:
-      # cv2 does not read some images ERR properly, so the `astype` method fails
-      # matplotlib.imread does not have this problem but, at the end, these ERR images still raise some issues
-      # so we decide to directly skip problematic images
-      errors.append(path)
-      continue
+  while(i < frames_count): 
+    ret, img = video_stream.read() 
 
-    # img = img[..., ::-1]  # RGB --> BGR (for working with cv2 later)
+    if not ret:
+      break # video finished
+
+    img = img.astype('uint8')
     shape = img.shape
 
     # -- Convert images of any shape to shape (height,width,3)
@@ -80,8 +80,10 @@ def img_processing(source_path, source_ext, dest_path,
     elif shape[2] > 3:
       img = img[:,:,3] # removes alpha and other channels
 
-    # -- Resize
+    # -- Crop
 
+    # -- Resize
+    
     inter = cv2.INTER_AREA # best for image decimation, see https://docs.opencv.org/master/da/d54/group__imgproc__transform.html#ga5bb5a1fea74ea38e1a5445ca803ff121
     img = cv2.resize(img, (img_width, img_height), interpolation = inter) 
       
@@ -92,27 +94,31 @@ def img_processing(source_path, source_ext, dest_path,
     else:
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    # -- Convert to float32
-
-    if cvt_float:
-      img = (img / 255).astype('float32')
-
     # -- Save and log progress
+    
+    file_path = os.path.join(save_path, '{} - frame {:06}'.format(video_name, i))
+    img = cv2.flip(img, 0)
 
-    img_folder_path, img_file = os.path.split(path)
-    img_folder_name = os.path.basename(img_folder_path)
-    img_name, img_ext = os.path.splitext(img_file)
-    save_path = os.path.join(dest_path, img_folder_name + '/')
-    general_utils.create_folder_if_not_exist(save_path)
+    if i == 0: # saves the first image just to have a reference of it
+      cv2.imwrite(file_path + '_cv2.jpg', img) 
+      plt.imsave(file_path + '_plt.jpg', img)
 
-    with open(os.path.join(save_path, img_name + '.pickle'), 'wb') as fp:
-      pickle.dump(img, fp)
+    with open(file_path + '.pickle', 'wb') as fp:
+      sample = {
+        'image': img.astype('uint8'), 
+        'centr': tuple([None]),
+        'bbox': tuple([None]),
+        'mask': np.array([0]).astype('uint8'),
+        'gt': np.array([None, None, None, None]).astype('float64')
+      }
+      pickle.dump(sample, fp)
 
     if i % 1000 == 0:
-      print('Progress {}/{}'.format(i, len(images_paths)))
-  
+      print('Progress {}/{}'.format(i, frames_count))
     
-  print('\n{} errors: {}'.format(len(errors), errors))
+    i += 1
+
+  video_stream.release() 
   print('\nProcess finished in {:.2f} minutes.'.format((time.monotonic() - start_time)/60))
   
 
@@ -135,18 +141,15 @@ def get_args():
     else:
         raise FileNotFoundError(string)
 
-  debug_data_size = 16
+  debug_data_size = 120
 
   parser = argparse.ArgumentParser(description='Take input images and saves them as float32 ndarrays of the given size in the pickle format')
-  parser.add_argument('source_path', type=dir_path, help='path to the dataset') # required
-  parser.add_argument('source_ext', type=str, help='image extension to be found') # required
+  parser.add_argument('video_path', type=file_path, help='path to the dataset') # required
   parser.add_argument('dest_path', type=dir_path, help='path where to store the result') # required
   parser.add_argument('dest_height', type=int, help='height of the resulting images')
   parser.add_argument('dest_width', type=int, help='width of the resulting images')
+  parser.add_argument('--data_size', type=int, default=None, metavar='DS', help='max number of frames of the video to extract (default = entire video, debug = {})'.format(debug_data_size))
   parser.add_argument('-g', '--dest_gray', action='store_true', help='if the argument is specified, the result will be grayscale')
-  parser.add_argument('--float32', action='store_true', help='if the argument is specified, the result will be float32 instead of uint8')
-  parser.add_argument('--data_size', type=int, default=None, metavar='DS', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_size))
-  parser.add_argument('-r', '--recursive', action='store_true', help='if the argument is specified, the `source_path` content is treated recursively in sub-directories')
   parser.add_argument('-d', '--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
 
   parsed_args = parser.parse_args()
@@ -162,8 +165,7 @@ if __name__ == "__main__":
   args = get_args()
   print('\nGIVEN ARGUMENTS: ', args, '\n\n')
 
-  img_processing(
-    args.source_path, args.source_ext, args.dest_path,
-    args.dest_height, args.dest_width, args.dest_gray, args.float32,
-    args.data_size, args.recursive
+  video_processing(
+    args.video_path, args.dest_path, args.data_size,
+    args.dest_height, args.dest_width, args.dest_gray
   )

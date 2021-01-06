@@ -13,6 +13,8 @@ import gc
 import socket
 import glob
 from datetime import datetime
+from pathlib import Path
+import ntpath
 
 import pickle
 import numpy as np
@@ -49,6 +51,16 @@ random_seed = 100
 
 
 ### ------ GENERAL
+
+def get_name_folder(path):
+  return os.path.basename(os.path.dirname(path))
+
+def get_name_file(path, keep_ext=False):
+  if keep_ext: # filename with extension
+    return ntpath.basename(path)
+  else: # filename without extension
+    return Path(path).stem
+  
 
 def create_folder_if_not_exist(path):
   '''
@@ -114,8 +126,6 @@ def list_files_in_folder(folder, extension, recursive = True):
         imgs_paths (list): List of images file paths
   '''
   
-  from pathlib import Path
-
   if recursive:
     glob = Path(folder).rglob('*.{}'.format(extension))
   else:

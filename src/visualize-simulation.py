@@ -286,7 +286,7 @@ def video_multi_predictions(path, images, actuals, predictions,
 
       if frame_idx >= details_frequency and frame_idx % details_frequency == 0: 
         frames_range = slice(frame_idx-details_frequency, frame_idx) # frames to consider
-        window_truth = actuals[:,frames_range] # shape (4, details_frequency)
+        window_truth = None if actuals is None else actuals[:,frames_range] # shape (4, details_frequency)
 
         for model_idx in range(3): # for each model
           window_predictions = predictions[model_idx][:,frames_range] # shape (4, details_frequency)
@@ -362,7 +362,7 @@ def simulate_flight(models_paths, models_name,
 
   start = 0
   end = start + data_len if data_len is not None else None
-  list_files = [os.path.join(data_folder, fn) for fn in os.listdir(data_folder)]
+  list_files = general_utils.list_files_in_folder(data_folder, 'pickle', False)
   list_files = list_files[start:end]
 
   with open(list_files[0], 'br') as first:
@@ -375,9 +375,6 @@ def simulate_flight(models_paths, models_name,
     backgrounds, bg_smoothmask, 
     deterministic=True, cache=True, repeat=1
   )
-
-  print('Retrieving ground truth from data...\n')
-  data_x, data_y = network_utils.get_dataset_from_tfdata_gen(data_generator)
   
   # Models
 
@@ -411,7 +408,7 @@ def simulate_flight(models_paths, models_name,
       backgrounds_str if len(backgrounds) > 0 else '',      # 4
   )
 
-  # --- Computation
+  # --- Prediction
 
   predictions = []
   for i, model in enumerate(models):
@@ -427,11 +424,16 @@ def simulate_flight(models_paths, models_name,
   # predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
   # print('Predictions loaded.\n')
 
-  save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
+  # --- Video
+
+  print('Retrieving ground truth from data...\n')
+  data_x, data_y = network_utils.get_dataset_from_tfdata_gen(data_generator)
+
   images = (255 - data_x).astype(np.uint8)
-  actuals = data_y
+  actuals = data_y if not np.isnan(data_y).any() else None
 
   print('Making video ...')
+  save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
   video_multi_predictions(save_path, images, actuals, predictions, fps, legend_path, window_seconds)
   print('Video saved to', save_path)
 
