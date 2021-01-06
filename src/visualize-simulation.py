@@ -347,9 +347,9 @@ def video_multi_predictions(path, images, actuals, predictions,
 ################################
 
 
-def simulate_flight(models_paths, models_name, 
-                    data_folder, data_len, bgs_folder, fps,
-                    legend_path, window_seconds, save_folder):
+def simulate_flight(models_paths, data_folder, data_len, 
+                    bgs_folder, fps, window_seconds,
+                    legend_path, save_folder):
     
   # --- Parameters
 
@@ -462,8 +462,8 @@ def get_args():
   parser = argparse.ArgumentParser(description='Prediction with the given models on some sorted dataset for simulating and visualizing a flight.')
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
   parser.add_argument("--models_paths", nargs="+", type=file_path, default=[], metavar='MP')
-  parser.add_argument('--models_name', type=str, metavar='MN', help='name/identifier of the chosen models set')
-  parser.add_argument("--data_folder", type=dir_path, help='folder path of the dataset')
+  # parser.add_argument('--models_name', type=str, metavar='MN', help='name/identifier of the chosen models set')
+  parser.add_argument("--data_folders", nargs="+", type=dir_path, help='folder path of the dataset')
   parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
   parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
   parser.add_argument("--fps", type=int, default=25, metavar='FPS', help='video frame per second (default = 25)')
@@ -495,9 +495,10 @@ if __name__ == "__main__":
 
   ## --- Training
 
-  simulate_flight(
-    args.models_paths, args.models_name, 
-    args.data_folder, args.data_len, args.bgs_folder,
-    args.fps, args.legend_path, args.window_sec,
-    args.save_folder,
-  )
+  for folder in args.data_folders:
+    print('\n ---------------------------------------- \n')
+    simulate_flight(
+      args.models_paths, folder, args.data_len,
+      args.bgs_folder, args.fps, args.window_sec, 
+      args.legend_path, args.save_folder,
+    )

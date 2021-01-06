@@ -97,13 +97,12 @@ def video_processing(video_path, dest_path, frames_count,
     # -- Save and log progress
     
     file_path = os.path.join(save_path, '{} - frame {:06}'.format(video_name, i))
-    img = cv2.flip(img, 0)
 
     if i == 0: # saves the first image just to have a reference of it
-      cv2.imwrite(file_path + '_cv2.jpg', img) 
-      plt.imsave(file_path + '_plt.jpg', img)
+      cv2.imwrite(file_path + '.jpg', img)
 
     with open(file_path + '.pickle', 'wb') as fp:
+      # img = cv2.flip(img, 0)
       sample = {
         'image': img.astype('uint8'), 
         'centr': tuple([None]),
