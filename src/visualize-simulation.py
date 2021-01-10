@@ -204,7 +204,7 @@ def video_multi_predictions(path, images, actuals, predictions,
   # Video writer
 
   video_width, video_height = 518, 326 + details_height
-  video_writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'XVID'), fps, (video_width, video_height))
+  video_writer = cv2.VideoWriter(path + '.avi', cv2.VideoWriter_fourcc(*'XVID'), fps, (video_width, video_height))
 
   # Parameters
   
@@ -344,10 +344,68 @@ def video_multi_predictions(path, images, actuals, predictions,
   video_writer.release() # close file video
 
 
+
+def variance_multi_predictions(save_path, images, actuals, predictions, fps, window_seconds):
+
+  if window_seconds is None:
+    raise ValueError('Parameter `windows_sec` must be non-empty.')
+
+  details_frequency = window_seconds * fps
+  frames_len = len(images)
+
+  preds_variance = np.zeros((frames_len // details_frequency, 3, 4)) # ? measures, 3 models, 4 variables
+  truth_variance = None
+  if actuals is not None:
+    truth_variance = np.zeros((frames_len // details_frequency, 4)) # ? measures, 4 variables
+  
+  # --- Metrics computation
+
+  variance_count = 0
+  for frame_idx in range(frames_len):
+    # every step, variance is computed on the previous details_frequency frames
+    # first [0:details_frequency] frames are simply ignored
+
+    if frame_idx >= details_frequency and frame_idx % details_frequency == 0: 
+      frames_range = slice(frame_idx-details_frequency, frame_idx) # frames to consider
+
+      for model_idx in range(3): # for each model
+        window_predictions = predictions[model_idx][:,frames_range] # shape (4, details_frequency)
+        preds_variance[variance_count, model_idx] = np.array([np.var(var) for var in window_predictions])
+
+      if truth_variance is not None: # for GT, if present
+        window_truth = actuals[:,frames_range] # shape (4, details_frequency)
+        truth_variance[variance_count] = np.array([np.var(var) for var in window_truth])
+
+      variance_count += 1
+
+  # --- Result
+
+  fig, axs = plt.subplots(1, 4, figsize=(48,12))
+  fig.suptitle(os.path.split(save_path)[-1])
+
+  for var_idx, var_name in enumerate(['X', 'Y', 'Z', 'W']):
+    cell = axs[var_idx]
+
+    for model_idx, model_name in enumerate(['Arena', 'CVPR', 'CVPR Aug']): # for each model
+      cell.plot(preds_variance[:, model_idx, var_idx], label=model_name, color=tuple(np.array(color_models[model_idx])/255))
+    if truth_variance is not None: # for GT, if present
+      cell.plot(truth_variance[:,var_idx], label='GT', color=tuple(np.array(color_main)/255))
+
+    cell.set_title(var_name)
+    cell.set_xlabel('frames')
+    cell.set_ylabel('variance')
+    cell.legend(loc='upper right')
+
+  if save_path is not None:
+    fig.savefig(save_path + '.png', dpi=300) 
+  else:
+    plt.show()
+  
+
 ################################
 
 
-def simulate_flight(models_paths, data_folder, data_len, 
+def simulate_flight(mode, models_paths, data_folder, data_len, 
                     bgs_folder, fps, window_seconds,
                     legend_path, save_folder):
     
@@ -418,24 +476,38 @@ def simulate_flight(models_paths, data_folder, data_len,
     predictions.append(pred)
   print('Predictions completed.\n')
 
-  # TODO fix making runtime predictions
-  # # np.save('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy', predictions)
+  # # for saving
+  # # np.save('C:/Users/96mar/Desktop/meeting_dario/preds.npy', predictions)
   # # exit()
-  # predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/videos/preds.npy')
+  # # for loading saved
+  # predictions = np.load('C:/Users/96mar/Desktop/meeting_dario/preds.npy')
   # print('Predictions loaded.\n')
-
-  # --- Video
 
   print('Retrieving ground truth from data...\n')
   data_x, data_y = network_utils.get_dataset_from_tfdata_gen(data_generator)
 
   images = (255 - data_x).astype(np.uint8)
   actuals = data_y if not np.isnan(data_y).any() else None
+  
+  # --- Output
+  
+  save_path = os.path.join(save_folder, save_name)
 
-  print('Making video ...')
-  save_path = os.path.join(save_folder, '{}.avi'.format(save_name))
-  video_multi_predictions(save_path, images, actuals, predictions, fps, legend_path, window_seconds)
-  print('Video saved to', save_path)
+  if mode == 'video':
+    print('Making video ...')
+    video_multi_predictions(save_path, images, actuals, predictions, fps, legend_path, window_seconds)
+    print('Video saved to', save_path)
+
+  elif mode == 'variance':
+    print('Computing variance ...')
+    variance_multi_predictions(save_path, images, actuals, predictions, fps, window_seconds)
+    print('Variance saved to', save_path)
+
+  else:
+    raise ValueError('Parameter `mode` is not valid.')
+  
+
+
 
 
 ################################
@@ -461,14 +533,15 @@ def get_args():
 
   parser = argparse.ArgumentParser(description='Prediction with the given models on some sorted dataset for simulating and visualizing a flight.')
   parser.add_argument('gpu_number', type=int, help='number of the GPU to use') # required
-  parser.add_argument("--models_paths", nargs="+", type=file_path, default=[], metavar='MP')
+  parser.add_argument("--mode", type=str, default='video', metavar='M', help="type of output to be produced: video or variance (default video)")
+  parser.add_argument("--models_paths", nargs=3, type=file_path, default=[], metavar='MP')
   # parser.add_argument('--models_name', type=str, metavar='MN', help='name/identifier of the chosen models set')
-  parser.add_argument("--data_folders", nargs="+", type=dir_path, help='folder path of the dataset')
+  parser.add_argument("--data_folders", nargs="+", type=dir_path, help='path to the datasets folders')
   parser.add_argument('--data_len', type=int, default=None, metavar='DL', help='max number of samples in the dataset (default = entire dataset, debug = {})'.format(debug_data_len))
-  parser.add_argument('--bgs_folder', type=dir_path, metavar='BGF', help='path to backgrounds folder, treaten recursively (default = no background replacement)')
+  parser.add_argument('--bgs_folders', nargs="+", type=dir_path, metavar='BGF', help='path to backgrounds folders, treaten recursively (default = no background replacement)')
   parser.add_argument("--fps", type=int, default=25, metavar='FPS', help='video frame per second (default = 25)')
   parser.add_argument("--legend_path", type=file_path, metavar='LP', help='path to the legend image for the video')
-  parser.add_argument("--window_sec", type=int, metavar='WS', help='window length in seconds for computing additional details (default or < 0 = no additional details)')
+  parser.add_argument("--windows_sec", nargs="+", type=int, metavar='WS', help='windows length in seconds for computing additional details (default or < 0 = no additional details)')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save evaluation metrics')
   parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
 
@@ -493,12 +566,25 @@ if __name__ == "__main__":
   network_utils.use_gpu_number(args.gpu_number)
 
 
-  ## --- Training
+  ## --- Computation
 
-  for folder in args.data_folders:
-    print('\n ---------------------------------------- \n')
-    simulate_flight(
-      args.models_paths, folder, args.data_len,
-      args.bgs_folder, args.fps, args.window_sec, 
-      args.legend_path, args.save_folder,
-    )
+  if args.bgs_folders is None:
+    args.bgs_folders = [None]
+  else:
+    args.bgs_folders.insert(0, None) # so that we can also consider the dataset without any background replacement
+
+  for data_folder in args.data_folders:
+    print('\n----------------------------------------------------------\n\nDATASET {}'.format(data_folder))
+
+    for bg_folder in args.bgs_folders:
+      print('\n--------------\nBackground {}'.format(bg_folder))
+
+      for window in args.windows_sec:
+        print('\n--- Window {} seconds\n'.format(window))
+
+        simulate_flight(
+          args.mode,
+          args.models_paths, data_folder, args.data_len,
+          bg_folder, args.fps, window, 
+          args.legend_path, args.save_folder,
+        )
