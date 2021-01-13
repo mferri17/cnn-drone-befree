@@ -1,0 +1,132 @@
+SCALETTA TESI
+
+1 INTRODUCTION
+- problem statement
+- state of the art: Dario, Nicky, ...
+
+2 METHODS
+- ambiente: beepop, ROS, TF, modello Dario
+- interpretabilità: generico, feature vis, gcam, ...
+- data augmentation: paper, classica, bg replacement (MaskRCNN)
+
+3 OPERATIONS
+- interpreting current model (GradCAM)
+- masking (canny, grabcut, MaskRCNN)
+- training (modelli, generator, tempo, GPU etc)
+
+4 RESULTS
+- quantitativi: training loss/mrse/r2, comparison on test set
+- qualitativi: descrizione, test set, custom indoor/outdoor (note per ciascuna variabile)
+
+5 CONCLUSIONE
+- reproducibility on crazyflie
+- future works
+
+--------------------------------------------------------------------------------------------------------------------
+
+Frontmatter
+    Title
+    Dedication
+    Quote
+    Abstract
+    Thanks
+    Table of contents
+    List of figures/tables/listings
+
+1 Introduction
+    Objective
+    Previous Work
+        Dario's paper
+        Nicky's thesis
+    Proposed Approach
+    Thesis Outline
+
+2 Theoretical Foundation
+    Robotics & Artificial Intelligence
+    Supervised Learning
+        Regression
+        Classification
+    Convolution Neural Networks
+
+3 System Description
+    Environment
+        Parrot Beepop 2
+        OptiTrack
+        Drone Arena
+        ROS
+    ProximityNet [Dario's model]
+        General Approach
+        Data Collection
+        Network Architecture
+        Model Performance
+            Quantitative
+            Qualitative
+
+4 Methodologies
+    Network Interpretability
+        Feature Visualization
+        Spatial Attribution
+        GradCAM
+    Network Generalization
+        Background Replacement
+        Human Detection & Segmentation
+        MaskRCNN
+
+5 Implementation
+    Tools
+        Software
+        Hardware
+    Model Interpretation
+        Regression to Classification
+        Applied GradCAM
+        Visual Considerations
+    Background Replacement
+        Experiments
+            Canny Edge Detection
+            Grabcut
+            MaskRCNN
+        Backgrounds Dataset
+    Classic Image Augmentation
+        Albumentation
+        Perlin noise
+        Examples
+    Final Training
+        TensorBoard
+        Data Generator
+        Parameters & Time Performance
+
+6 Evaluation
+    Analyzed Models
+        Arena
+        CVPR
+        CVPR Aug
+    Quantitative Results
+        Metrics
+        Test Sets
+        Models Comparison
+    Qualitative Results
+        Methodologies
+            Interactive Chart
+            Variance over Time
+        Comparison on Original Video
+        Comparison on Artificial Videos
+        Comparison on Phone Recorded Videos
+    Summary
+
+7 Conclusion
+    Final Thoughts
+    Future Works
+        Apply network interpretability again
+        Reproducibility on the Crazyflie
+            Connect to Nicky's work on porting the model to nano-drones
+            Show MaskRCNN on Nicky's dataset
+        Should I mention other people currently working on the project?
+
+Appendix A: Additional images
+Appendix B: Acronyms
+References
+
+
+        
+
+
