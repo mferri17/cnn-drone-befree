@@ -65,6 +65,38 @@ from functions import network_utils
 ### FUNCTIONS
 ######
 
+def bgreplace_example(data_folder, bgs_folder):
+
+    data_files = general_utils.list_files_in_folder(data_folder, 'pickle', recursive=True)
+    bgs_files = general_utils.list_files_in_folder(bgs_folder, 'pickle', recursive=True)
+
+    step = 2000
+    ncols = 4
+    nrows = 8
+    size = (nrows * ncols)
+
+    for start in range(0, len(data_files), step * size):
+      fix, ax = plt.subplots(nrows, ncols, figsize=(30, 45),
+                             subplot_kw={'xticks': [], 'yticks': []},
+                             gridspec_kw=dict(left=0.1, right=0.9, bottom=0.1, top=0.9, wspace=0.15))
+
+      end = start + step * size
+      for count, i in enumerate(range(start, end, step)):
+        sample = general_utils.load_pickle(data_files[i])
+
+        img = sample['image'].astype('uint8')
+        mask = sample['mask'].astype('uint8')
+        bg = (general_utils.load_pickle(bgs_files[np.random.randint(0, len(bgs_files))]) / 255).astype('float32')
+        result = general_utils.image_augment_background(img, mask, bg, smooth=True)
+
+        cell = ax[count//ncols, count%ncols]
+        # cell.set_title('frame {:05}'.format(i), fontsize=3)
+        cell.imshow(result)
+
+      plt.savefig('C:/Temp/bgreplace_example.png', dpi=300, bbox_inches='tight')
+
+
+
 def train_with_generator(data_folder, network_weights_path, data_len,
                          regression, classification,
                          retrain_from, verbose, batch_size, epochs, oversampling, val_not_shuffle,
@@ -231,3 +263,5 @@ if __name__ == "__main__":
     args.bgs_folder, args.bgs_len, args.bgs_name, args.bg_smoothmask, args.aug_prob, args.noise_folder,
     args.view_stats, save_stats=args.save, save_model=args.save, save_folder=args.save_folder
   )
+
+  # bgreplace_example(args.data_folder, args.bgs_folder)

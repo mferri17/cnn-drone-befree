@@ -337,7 +337,7 @@ def map_parse_input(filename, img_shape):
   img, mask, gt = tf.numpy_function(
     tf_parse_input, 
     [filename], 
-    [tf.uint8, tf.uint8, tf.float64], 
+    [tf.uint8, tf.uint8, tf.float64],
     'tf_parse_input')
 
   img.set_shape(img_shape)
@@ -532,11 +532,15 @@ def network_compile(model, regression, classification, compute_r2=False):
     loss.extend(['categorical_crossentropy'] * 4)
     metrics.append('accuracy')
 
-  model.compile(loss=loss,
-                metrics=metrics,
-                optimizer='adam',
-                run_eagerly=eager) 
-
+  if eager:
+    model.compile(loss=loss,
+                  metrics=metrics,
+                  optimizer='adam',
+                  run_eagerly=eager) 
+  else:
+    model.compile(loss=loss,
+                  metrics=metrics,
+                  optimizer='adam')
   
   return model
 
@@ -564,7 +568,7 @@ def network_train_generator(model, input_size, data_files,
     callbacks.append(early_stop)
 
   if use_profiler:
-    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,100')
+    tensorboard = tf.keras.callbacks.TensorBoard(profiler_dir, histogram_freq=1, profile_batch = '5,40')
     callbacks.append(tensorboard)
 
   # --- Data
