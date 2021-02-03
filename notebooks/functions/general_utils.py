@@ -14,6 +14,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from collections import Counter
 
 import cv2
 from PIL import Image
@@ -188,10 +189,13 @@ def get_dataset_from_pickle(pickle_path, dataset_start_index = 0, dataset_keep_r
   # --- Actuals distribution
 
   def plot_class_distribution(values, labels, var_name):
-    plt.hist(values)
-    plt.xticks(range(len(labels)), labels)
-    plt.title(var_name + ' class distribution')
-    plt.show()
+      plt.title(var_name + ' class distribution')
+      counts = [el[1] for el in sorted(Counter(values).items())]
+      plt.bar(range(len(labels)), counts)
+      plt.xticks(range(len(labels)), labels)
+      plt.xlabel('class')
+      plt.ylabel('count')
+      plt.show()
 
   if plot_actual_distribution:
     plot_class_distribution(var_x_assign, var_labels, 'X')
