@@ -50,12 +50,12 @@ def video_processing(video_path, dest_path, frames_count,
 
   time_str = time.strftime("%Y%m%d_%H%M%S")
   video_name = general_utils.get_name_file(video_path)
-  save_path = os.path.join(dest_path, 'custom', '{} {}/'.format(time_str, video_name))
+  save_path = os.path.join(dest_path, '{} {}/'.format(time_str, video_name))
   general_utils.create_folder_if_not_exist(save_path)
   
   video_stream = cv2.VideoCapture(video_path) 
-  if frames_count is None:
-    frames_count = int(video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
+  if frames_count is None: # if total frames number is not limited
+    frames_count = int(video_stream.get(cv2.CAP_PROP_FRAME_COUNT)) # set video length
 
   print('Saving to', save_path)
   print('Preprocessing video to extract images of shape ({},{},{}) ...'.format(img_height, img_width, 1 if grayscale else 3))

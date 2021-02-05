@@ -1,5 +1,5 @@
 python37 ./../visualize-simulation.py 0 ^
---mode "variance" ^
+--mode "video" ^
 --models_paths ^
     "./../../dev-models/training_tfdata/20201229_170151 tethys_idsia_ch - regr_len63720_b64_rw_trainfrom0_ep60 - v1_model.h5" ^
     "./../../dev-models/training_tfdata/20201229_221211 tethys_idsia_ch - regr_len63720_b64_rw_trainfrom0_bgCVPRindoor(len15589)_ep60 - v1_model.h5" ^
@@ -16,5 +16,7 @@ python37 ./../visualize-simulation.py 0 ^
     "C:/Users/96mar/Desktop/meeting_dario/data/custom/20210106_191933 marco_courtyard_02/" ^
 --windows_sec 2 5 10 ^
 --fps 30 ^
+--chosen_frames 4165 4186 4203 4211 ^
 --legend_path "./../resources/legend.png" ^
+--save ^
 --save_folder "./../../dev-visualization/flight-simulation/" ^

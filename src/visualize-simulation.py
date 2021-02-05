@@ -59,7 +59,8 @@ from functions import network_utils
 ### GLOBAL VARIABLES
 ######
 
-color_models = [(0, 255, 0), (255, 0, 0), (0, 0, 255)]
+color_models_cv2 = [(0, 255, 0), (255, 0, 0), (0, 0, 255)]
+color_models_plt = [(0, 255, 0), (0, 0, 255), (255, 0, 0)]
 color_main = (0, 0, 0)
 
 ################################
@@ -111,7 +112,7 @@ def draw_pointer(img, value, variable, model, frame_vert_dim, frame_horiz_dim, c
   if model == -1: # GT
     color_ = color_main    # black
   elif model >= 0 and model <= 2:
-    color_ = color_models[model]
+    color_ = color_models_cv2[model]
   else:
     raise ValueError('Parameter `model` is not valid.')
 
@@ -184,7 +185,7 @@ def video_simple(path, images):
 
 
 def video_multi_predictions(path, images, actuals, predictions, 
-                            fps, legend_path, window_seconds):
+                            fps, legend_path, window_seconds, chosen_frames):
 
   # Metrics
 
@@ -204,7 +205,9 @@ def video_multi_predictions(path, images, actuals, predictions,
   # Video writer
 
   video_width, video_height = 518, 326 + details_height
-  video_writer = cv2.VideoWriter(path + '.avi', cv2.VideoWriter_fourcc(*'XVID'), fps, (video_width, video_height))
+
+  if path is not None and chosen_frames is None:
+    video_writer = cv2.VideoWriter(path + '.avi', cv2.VideoWriter_fourcc(*'XVID'), fps, (video_width, video_height))
 
   # Parameters
   
@@ -311,7 +314,7 @@ def video_multi_predictions(path, images, actuals, predictions,
         values = ', '.join('{:.3f}'.format(v) for v in preds_variance[model_idx])
         cv2.putText(
           crop_img, 'M{} [X, Y, Z, W] variance [{}]'.format(model_idx+1, values), 
-          (dx, dy), font, 0.5, color_models[model_idx], 1, cv2.LINE_AA
+          (dx, dy), font, 0.5, color_models_cv2[model_idx], 1, cv2.LINE_AA
         )
         dy += line_height
 
@@ -330,19 +333,71 @@ def video_multi_predictions(path, images, actuals, predictions,
           values = ', '.join('{:.3f}'.format(v) for v in preds_rmse[model_idx])
           cv2.putText(
             crop_img, 'M{} [X, Y, Z, W] RMSE [{}]'.format(model_idx+1, values), 
-            (dx, dy), font, 0.5, color_models[model_idx], 1, cv2.LINE_AA
+            (dx, dy), font, 0.5, color_models_cv2[model_idx], 1, cv2.LINE_AA
           )
           dy += line_height
 
     # --- Result
-    # plt.imshow(crop_img)
-    # plt.show()
-    # exit()
-    video_writer.write(crop_img)
+    if path is None: # debug
+      plt.imshow(crop_img)
+      plt.show()
+      break
+    elif chosen_frames is None: # video
+      video_writer.write(crop_img)
+    elif frame_idx in chosen_frames: # single frames
+      cv2.imwrite('{} - frame_{}.png'.format(path, frame_idx), crop_img)
+      chosen_frames.remove(frame_idx)
+      if len(chosen_frames) == 0:
+        break
 
   
-  video_writer.release() # close file video
+  if path is not None and chosen_frames is None:
+    video_writer.release() # close file video
 
+
+
+def gtpred_multi_predictions(save_path, images, actuals, predictions, fps, window_seconds):
+
+  fig, axs = plt.subplots(4, 1, figsize=(15,10))
+  plt.subplots_adjust(left=0.05, bottom=0.05, right=0.985, top=0.95, hspace=0)
+
+  ylimits_centr = [1.5, 0, 0, 0]
+  ylimits_offset = [0.3, 0.4, 0.15, 0.7]
+   
+  for var_idx, var_name in enumerate(['X', 'Y', 'Z', 'W']):
+    cell = axs[var_idx]
+    ll = ylimits_centr[var_idx] - ylimits_offset[var_idx]
+    ul = ylimits_centr[var_idx] + ylimits_offset[var_idx]
+
+    for model_idx, model_name in enumerate(['Arena', 'CVPR', 'CVPR Aug']): # for each model
+      values = predictions[model_idx][var_idx]
+      if ylimits_centr is not None and ylimits_offset is not None:
+        values = np.clip(values, ll, ul)
+      cell.plot(values, label=model_name, color=tuple(np.array(color_models_plt[model_idx])/255))
+    
+    if actuals is not None: # for GT, if present
+      values = actuals[var_idx]
+      if ylimits_centr is not None and ylimits_offset is not None:
+        values = np.clip(values, ll, ul)
+      cell.plot(values, label='GT', color=tuple(np.array(color_main)/255))
+
+    cell.set_xlabel('frame')
+    cell.set_ylabel(var_name + ' value')
+
+    if ylimits_centr is not None and ylimits_offset is not None:
+      offset = ul * 0.1
+      cell.set_ylim([ll - offset, ul + offset])
+    
+    if var_idx == 0: # legend is needed only for the first chart (is the same for the others)
+      cell.legend(loc='upper right')
+
+  if save_path is not None:
+    fig.suptitle(os.path.split(save_path)[-1])
+    fig.savefig(save_path + '.png', dpi=100) 
+  else:
+    plt.show()
+    plt.close()
+    
 
 
 def variance_multi_predictions(save_path, images, actuals, predictions, fps, window_seconds):
@@ -359,7 +414,7 @@ def variance_multi_predictions(save_path, images, actuals, predictions, fps, win
     truth_variance = np.zeros((frames_len // details_frequency, 4)) # ? measures, 4 variables
   
   # --- Metrics computation
-
+  
   variance_count = 0
   for frame_idx in range(frames_len):
     # every step, variance is computed on the previous details_frequency frames
@@ -380,24 +435,40 @@ def variance_multi_predictions(save_path, images, actuals, predictions, fps, win
 
   # --- Result
 
-  fig, axs = plt.subplots(1, 4, figsize=(48,12))
-  fig.suptitle(os.path.split(save_path)[-1])
+  fig, axs = plt.subplots(4, 1, figsize=(15, 10))
+  plt.subplots_adjust(left=0.05, bottom=0.05, right=0.985, top=0.95, hspace=0)
+
+  ylimits = [0.20, 0.20, 0.06, 0.8] 
 
   for var_idx, var_name in enumerate(['X', 'Y', 'Z', 'W']):
     cell = axs[var_idx]
 
     for model_idx, model_name in enumerate(['Arena', 'CVPR', 'CVPR Aug']): # for each model
-      cell.plot(preds_variance[:, model_idx, var_idx], label=model_name, color=tuple(np.array(color_models[model_idx])/255))
+      values = preds_variance[:, model_idx, var_idx]
+      if ylimits is not None:
+        values = np.clip(values, 0, ylimits[var_idx])
+      cell.plot(values, label=model_name, color=tuple(np.array(color_models_plt[model_idx])/255))
+    
     if truth_variance is not None: # for GT, if present
-      cell.plot(truth_variance[:,var_idx], label='GT', color=tuple(np.array(color_main)/255))
+      values = truth_variance[:,var_idx]
+      if ylimits is not None:
+        values = np.clip(values, 0, ylimits[var_idx])
+      cell.plot(values, label='GT', color=tuple(np.array(color_main)/255))
 
-    cell.set_title(var_name)
-    cell.set_xlabel('frames')
-    cell.set_ylabel('variance')
-    cell.legend(loc='upper right')
+    # cell.set_title(var_name)
+    cell.set_xlabel('time window ({} seconds each)'.format(window_seconds))
+    cell.set_ylabel(var_name + ' variance')
+
+    if ylimits is not None:
+      offset = ylimits[var_idx] * 0.1
+      cell.set_ylim([0 - offset, ylimits[var_idx] + offset])
+    
+    if var_idx == 0: # legend is needed only for the first chart (is the same for the others)
+      cell.legend(loc='upper right')
 
   if save_path is not None:
-    fig.savefig(save_path + '.png', dpi=300) 
+    fig.suptitle(os.path.split(save_path)[-1])
+    fig.savefig(save_path + '.png', dpi=100) 
   else:
     plt.show()
   
@@ -406,8 +477,8 @@ def variance_multi_predictions(save_path, images, actuals, predictions, fps, win
 
 
 def simulate_flight(mode, models_paths, data_folder, data_len, 
-                    bgs_folder, fps, window_seconds,
-                    legend_path, save_folder):
+                    bgs_folder, fps, window_seconds, chosen_frames,
+                    legend_path, save, save_folder):
     
   # --- Parameters
 
@@ -491,12 +562,17 @@ def simulate_flight(mode, models_paths, data_folder, data_len,
   
   # --- Output
   
-  save_path = os.path.join(save_folder, save_name)
+  save_path = os.path.join(save_folder, save_name) if save else None
 
   if mode == 'video':
     print('Making video ...')
-    video_multi_predictions(save_path, images, actuals, predictions, fps, legend_path, window_seconds)
+    video_multi_predictions(save_path, images, actuals, predictions, fps, legend_path, window_seconds, chosen_frames)
     print('Video saved to', save_path)
+
+  elif mode == 'gtpred':
+    print('Computing GT vs Pred chart ...')
+    gtpred_multi_predictions(save_path, images, actuals, predictions, fps, window_seconds)
+    print('GT vs Pred chart saved to', save_path)
 
   elif mode == 'variance':
     print('Computing variance ...')
@@ -541,7 +617,9 @@ def get_args():
   parser.add_argument('--bgs_folders', nargs="+", type=dir_path, metavar='BGF', help='path to backgrounds folders, treaten recursively (default = no background replacement)')
   parser.add_argument("--fps", type=int, default=25, metavar='FPS', help='video frame per second (default = 25)')
   parser.add_argument("--legend_path", type=file_path, metavar='LP', help='path to the legend image for the video')
-  parser.add_argument("--windows_sec", nargs="+", type=int, metavar='WS', help='windows length in seconds for computing additional details (default or < 0 = no additional details)')
+  parser.add_argument("--windows_sec", nargs="+", default=[None], type=int, metavar='WS', help='windows length in seconds for computing additional details (default or < 0 = no additional details)')
+  parser.add_argument("--chosen_frames", nargs="+", default=None, type=int, metavar='CF', help='list of frames number to be saved (if specified, no video is created but just single images)')
+  parser.add_argument('--save', action='store_true', help='specify the argument if you want to save evaluation metrics')
   parser.add_argument('--save_folder', type=dir_path, metavar='SVF', help='path where to save evaluation metrics')
   parser.add_argument('--debug', action='store_true', help='if the argument is specified, some parameters are set (overwritten) to debug values')
 
@@ -586,5 +664,6 @@ if __name__ == "__main__":
           args.mode,
           args.models_paths, data_folder, args.data_len,
           bg_folder, args.fps, window, 
-          args.legend_path, args.save_folder,
+          args.chosen_frames, args.legend_path,
+          args.save, args.save_folder, 
         )
